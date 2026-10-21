@@ -45,10 +45,10 @@ jobs:
     name: "${{ matrix.row }}: ${{ matrix.desc }}"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 #v4.4.0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
         with:
           go-version-file: go.mod
 
@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload library lifecycle evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: windows-library-${{ matrix.row }}
           path: ${{ runner.temp }}/windows-library-${{ matrix.row }}
@@ -76,10 +76,10 @@ jobs:
     name: "W5: Group Policy NRPT (Server 2025, LocalSystem)"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 #v4.4.0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
         with:
           go-version-file: go.mod
 
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload library lifecycle evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4.6.2
         with:
           name: windows-library-W5
           path: ${{ runner.temp }}/windows-library-W5
