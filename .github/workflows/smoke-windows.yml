@@ -1,0 +1,100 @@
+# Run one DNS-mutating smoke row per disposable Windows runner.
+# W1/W2 use Server 2025; W3/W4 use Windows 11 arm64. Each pair covers
+# catch-all and split DNS. W6 checks two identities on Server 2025. W7
+# checks that a live Manager repairs a deleted NRPT rule and adapter suffix.
+# W5 separately exercises Group Policy NRPT as LocalSystem.
+# See internal/cmd/smoketest/matrix_win.go.
+name: smoke windows
+
+# Least privilege: the smoke jobs only read the repo. Pin the token read-only
+# instead of inheriting the repository default scope.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            row: "W1"
+            desc: "Server 2025 catch-all"
+          - runner: windows-2025
+            row: "W2"
+            desc: "Server 2025 split + reverse zone"
+          - runner: windows-11-arm
+            row: "W3"
+            desc: "Windows 11 catch-all"
+          - runner: windows-11-arm
+            row: "W4"
+            desc: "Windows 11 split + reverse zone"
+          - runner: windows-2025
+            row: "W6"
+            desc: "Server 2025 two identities"
+          - runner: windows-2025
+            row: "W7"
+            desc: "Server 2025 live repair"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    name: "${{ matrix.row }}: ${{ matrix.desc }}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Windows smoke row ${{ matrix.row }}
+        shell: powershell
+        run: ./.github/scripts/windows-library-smoke.ps1 -Row "${{ matrix.row }}"
+
+      - name: Upload library lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-library-${{ matrix.row }}
+          path: ${{ runner.temp }}/windows-library-${{ matrix.row }}
+          retention-days: 30
+
+  # Row W5: the Group Policy NRPT assertion row. Separate from the matrix job
+  # because it is the only row that drives dnsconfigctl as LocalSystem (via
+  # .github/scripts/run-as-system.ps1) and the only one that mutates the Group
+  # Policy hive, which no other row may see mid-flight.
+  #
+  # It runs on pull_request too, since it covers backend code.
+  smoke-group-policy:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    name: "W5: Group Policy NRPT (Server 2025, LocalSystem)"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The row's own first assertion re-proves SYSTEM identity, so a wrapper
+      # regression fails the row rather than silently downgrading it to the
+      # elevated-admin fallback path.
+      - name: Run Windows Group Policy smoke row
+        shell: powershell
+        run: ./.github/scripts/windows-library-smoke.ps1 -Row W5
+
+      - name: Upload library lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-library-W5
+          path: ${{ runner.temp }}/windows-library-W5
+          retention-days: 30

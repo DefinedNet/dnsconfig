@@ -1,0 +1,68 @@
+# Run one DNS-mutating smoke row per disposable runner to isolate resolver state.
+# M1/M2 use macOS 15, M3/M4 use macOS 14, and M5/M6 use macOS 26.
+# Each pair covers catch-all and split DNS; M3 also restarts configd.
+# M7 checks two identities on each of macOS 14, 15, and 26 under one row ID.
+# See internal/cmd/smoketest/matrix_macos.go.
+name: smoke macos
+
+# Least privilege: the smoke jobs only read the repo. Pin the token read-only
+# instead of inheriting the repository default scope.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            row: "M1"
+            desc: "Sequoia catch-all"
+          - runner: macos-15
+            row: "M2"
+            desc: "Sequoia split + reverse zone"
+          - runner: macos-14
+            row: "M3"
+            desc: "Sonoma catch-all"
+          - runner: macos-14
+            row: "M4"
+            desc: "Sonoma split + reverse zone"
+          - runner: macos-26
+            row: "M5"
+            desc: "Tahoe catch-all"
+          - runner: macos-26
+            row: "M6"
+            desc: "Tahoe split + reverse zone"
+          - runner: macos-15
+            row: "M7"
+            desc: "Sequoia two identities"
+          - runner: macos-14
+            row: "M7"
+            desc: "Sonoma two identities"
+          - runner: macos-26
+            row: "M7"
+            desc: "Tahoe two identities"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    name: "${{ matrix.row }}: ${{ matrix.desc }}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The `local` driver runs the row on this machine. macOS state-changing
+      # commands self-escalate via sudo in their argv (passwordless on the
+      # runner), so the harness needs no extra privilege wrapper here.
+      - name: Run macOS smoke row ${{ matrix.row }}
+        run: go run ./internal/cmd/smoketest -rows "${{ matrix.row }}"

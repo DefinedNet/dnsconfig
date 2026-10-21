@@ -1,0 +1,21 @@
+# Local working notes.
+.claude/
+
+# Built binaries
+/dnsconfigctl
+/smoketest
+/bin/
+
+# Go build artifacts
+*.test
+*.out
+*.exe
+coverage.txt
+coverage.html
+
+# Editor & OS junk
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~

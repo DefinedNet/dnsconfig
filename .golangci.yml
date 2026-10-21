@@ -1,0 +1,35 @@
+# Use the default correctness linters plus exhaustive and gofmt checks.
+# gosec is omitted because world-readable resolver files, subprocess calls,
+# and the filesystem abstraction are intentional parts of the library.
+version: "2"
+
+linters:
+  enable:
+    # Check that adding an enum value also updates switches such as BackendKind.IsValid.
+    - exhaustive
+  settings:
+    exhaustive:
+      # A default clause opts out for deliberately partial switches.
+      default-signifies-exhaustive: true
+    errcheck:
+      # CLI diagnostics do not propagate stdout/stderr write errors.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # Permit deferred test cleanup without exempting production Close calls.
+      - path: _test\.go
+        linters:
+          - errcheck
+        source: 'defer .*\.Close\(\)'
+
+issues:
+  # Report all findings.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
