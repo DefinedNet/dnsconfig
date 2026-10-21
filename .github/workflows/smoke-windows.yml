@@ -11,10 +11,9 @@ name: smoke windows
 permissions:
   contents: read
 
+# PRs and pushes to main run this through ci.yml, so its pass/fail check covers it.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 jobs:
