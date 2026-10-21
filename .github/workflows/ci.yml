@@ -52,3 +52,19 @@ jobs:
         run: golangci-lint run ./...
       - name: Lint (windows)
         run: GOOS=windows golangci-lint run ./...
+
+  smoke-macos:
+    uses: ./.github/workflows/smoke-macos.yml
+
+  smoke-windows:
+    uses: ./.github/workflows/smoke-windows.yml
+
+  ci-pass-fail:
+    name: pass/fail check
+    if: always()
+    needs: [test, lint, smoke-macos, smoke-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
