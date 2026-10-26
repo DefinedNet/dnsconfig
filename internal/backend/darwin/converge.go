@@ -298,6 +298,24 @@ func (b *Backend) Clear(ctx context.Context, attempt backend.Attempt) (backend.R
 	return result, err
 }
 
+// HasArtifacts implements backend.Backend with the inspection clearArtifacts
+// runs before removing anything. A resolver file or staging file settles the
+// answer without listing State keys.
+func (b *Backend) HasArtifacts(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	entries, err := b.scanResolverDir()
+	if err != nil {
+		return false, err
+	}
+	if len(b.ownedNames(entries)) > 0 {
+		return true, nil
+	}
+	keys, err := b.listStateKeyNames(ctx)
+	return len(keys) > 0, err
+}
+
 // clearArtifacts removes this identity's artifacts and reports whether it
 // removed any.
 func (b *Backend) clearArtifacts(ctx context.Context, final bool) (bool, error) {

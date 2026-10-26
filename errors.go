@@ -21,7 +21,8 @@ var (
 	// Options.Identity. From the worker it means the attempt changed nothing
 	// and retries with backoff. After Close it means the final cleanup for a
 	// recorded goal was not run because the holder's configuration stays;
-	// Close itself does not return it.
+	// Close itself does not return it. [Recover] returns it, since its
+	// caller asked for removal and got none.
 	ErrManagerAlreadyRunning = errors.New("another Manager holds this identity")
 
 	// ErrConflict reports, through Status.LastError, that another identity
@@ -68,7 +69,7 @@ var (
 // errors.Is to compare against sentinels; use errors.As to inspect Op and
 // Backend.
 type Error struct {
-	// Op names the operation: "New", "Set", "Clear", or "Close", or
+	// Op names the operation: "New", "Set", "Clear", "Close", or "Recover", or
 	// "Converge" for a worker attempt recorded in Status.LastError.
 	Op string
 	// Backend identifies the selected backend, or is empty before selection.

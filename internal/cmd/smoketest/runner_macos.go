@@ -1076,10 +1076,18 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 
 	_ = cfg.exec(ctx, 15*time.Second, "sudo", "pkill", "-f", "dnsconfigctl serve")
 
-	resetAndVerify := func(tag string) string {
-		r := cfg.exec(ctx, 60*time.Second, "sudo", "/tmp/dnsconfigctl", "-backend", "darwin", "reset")
-		if !r.Successful() || !assertResetPerformedRevert(cfg, r) {
-			return "reset"
+	// cleanup is "reset" or "recover"; both must remove what the detached
+	// set left.
+	resetAndVerify := func(tag, cleanup string) string {
+		r := cfg.exec(ctx, 60*time.Second, "sudo", "/tmp/dnsconfigctl", "-backend", "darwin", cleanup)
+		var removed bool
+		if cleanup == "recover" {
+			removed = assertRecover(cfg, r, true)
+		} else {
+			removed = r.Successful() && assertResetPerformedRevert(cfg, r)
+		}
+		if !removed {
+			return cleanup
 		}
 		if !macosAssertKeysAbsent(ctx, cfg, tag) {
 			return "state-key-cleanup"
@@ -1091,7 +1099,7 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 			return !strings.Contains(string(r.Stdout), sentinelAddr)
 		})
 		if !staleGone {
-			cfg.Log("    stale overlay survived reset: %s", staleResult.String())
+			cfg.Log("    stale overlay survived %s: %s", cleanup, staleResult.String())
 			return "stale-cache"
 		}
 
@@ -1108,17 +1116,30 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 				time.Sleep(resolutionBackoff)
 			}
 		}
-		cfg.Log("    reset did not settle; pre-state was:\n%s", indent("        ", string(preBytes)))
+		cfg.Log("    %s did not settle; pre-state was:\n%s", cleanup, indent("        ", string(preBytes)))
 		return "semantic-reset"
 	}
 
-	if stage := resetAndVerify("post"); stage != "" {
+	// Catch-all rows clean up the first cycle through Recover, as a consumer
+	// starting after a crash would, and a second Recover must find nothing.
+	firstCleanup := "reset"
+	if !row.Split {
+		firstCleanup = "recover"
+	}
+	if stage := resetAndVerify("post", firstCleanup); stage != "" {
 		return ri.failOrKeep(stage)
+	}
+	if !row.Split {
+		r := cfg.exec(ctx, 60*time.Second, "sudo", "/tmp/dnsconfigctl", "-backend", "darwin", "recover")
+		if !assertRecover(cfg, r, false) {
+			return ri.failOrKeep("recover-again")
+		}
+		cfg.Log("    recover removed the detached set's configuration; a second recover found nothing")
 	}
 	if after, ok := macosWaitSearch(ctx, cfg, 10*time.Second, func(list []string) bool {
 		return slices.Equal(list, baseSearch)
 	}); !ok {
-		cfg.Log("    reset did not restore the pre-Set search list; before=%q after=%q", baseSearch, after)
+		cfg.Log("    %s did not restore the pre-Set search list; before=%q after=%q", firstCleanup, baseSearch, after)
 		return ri.failOrKeep("post-reset-search")
 	}
 
@@ -1136,7 +1157,7 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 	if tag := macosCheckSearchContribution(ctx, cfg, macosOrderSearch, overlap.base, 10*time.Second); tag != "" {
 		return ri.failOrKeep("overlap-" + tag)
 	}
-	if stage := resetAndVerify("post2"); stage != "" {
+	if stage := resetAndVerify("post2", "reset"); stage != "" {
 		return ri.failOrKeep("cycle2-" + stage)
 	}
 	if after, ok := macosWaitSearch(ctx, cfg, 10*time.Second, func(list []string) bool {

@@ -133,6 +133,22 @@ type scriptedBackend struct {
 	closeCalls int
 	closeErr   error
 	limitErr   error
+	// found and probeErr answer HasArtifacts; probeHeld records whether
+	// either lock was held during the last probe.
+	found     bool
+	probeErr  error
+	probes    int
+	probeHeld bool
+}
+
+func (b *scriptedBackend) HasArtifacts(context.Context) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.probes++
+	if b.locker != nil {
+		b.probeHeld = b.locker.Held(hostLockName) || b.locker.Held(identityLockName(b.identity))
+	}
+	return b.found, b.probeErr
 }
 
 func newScriptedBackend() *scriptedBackend {

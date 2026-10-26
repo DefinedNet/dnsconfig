@@ -162,6 +162,14 @@ func TestResetNoop(t *testing.T) {
 	assert.Equal(t, "reset OK (nothing to reset)\n", res.stdout)
 }
 
+// TestRecoverNoop: the no-op backend finds nothing, which the harness tells
+// apart from a performed recovery by the exact line.
+func TestRecoverNoop(t *testing.T) {
+	res := runCLI(t, "-backend", "noop", "recover")
+	require.Equal(t, 0, res.code, "stderr=%q stdout=%q", res.stderr, res.stdout)
+	assert.Equal(t, "recover OK (nothing to recover)\n", res.stdout)
+}
+
 // TestSetUnknownArgs confirms a trailing positional argument to `set` is a
 // usage error. This guards against the smoke harness accidentally passing
 // a positional where a flag was meant.

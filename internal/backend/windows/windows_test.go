@@ -1015,3 +1015,49 @@ func TestNewRejectsUnsafeIdentity(t *testing.T) {
 		assert.Nil(t, b, "%q", identity)
 	}
 }
+
+// TestHasArtifactsFindsOwnedRules: the probe finds this identity's rule,
+// active or staged, in either NRPT store, ignores other identities' rules,
+// and neither writes nor starts a change source while it looks.
+func TestHasArtifactsFindsOwnedRules(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  string
+		want bool
+	}{
+		{"none", "", false},
+		{"other identity", nrptBase + `\` + ruleName(otherIdentity, 0), false},
+		{"local", nrptBase + `\` + ruleName(testIdentity, 0), true},
+		{"staged", nrptBase + `\` + ruleName(testIdentity, 0) + pendingRuleSuffix, true},
+		{"Group Policy only", gpoNrptBase + `\` + ruleName(testIdentity, 1), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newFakeRegistry()
+			if tc.key != "" {
+				require.NoError(t, reg.CreateKey(tc.key))
+			}
+			writes := len(reg.writes)
+			b, err := newTestBackend(context.Background(), Options{Registry: reg})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = b.Close() })
+			has, err := b.HasArtifacts(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, has)
+			assert.Equal(t, writes, len(reg.writes), "the probe writes nothing")
+			b.mu.Lock()
+			assert.Nil(t, b.policySrc, "the probe starts no policy watch")
+			assert.Nil(t, b.regSrc, "the probe starts no registry watch")
+			b.mu.Unlock()
+		})
+	}
+
+	t.Run("list failure", func(t *testing.T) {
+		reg := &failInjectRegistry{fakeRegistry: newFakeRegistry(), failAt: -1}
+		reg.setFailSubKeys(true)
+		b, err := newTestBackend(context.Background(), Options{Registry: reg})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = b.Close() })
+		_, err = b.HasArtifacts(context.Background())
+		require.ErrorIs(t, err, errInjectedRegistry)
+	})
+}

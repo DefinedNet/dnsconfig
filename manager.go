@@ -165,6 +165,17 @@ type attemptJob struct {
 // touches the host at construction or needs Options.InterfaceName; Windows
 // checks it at Set.
 func New(ctx context.Context, opts Options) (*Manager, error) {
+	m, err := build(ctx, "New", opts)
+	if err != nil {
+		return nil, err
+	}
+	m.start()
+	return m, nil
+}
+
+// build validates opts and returns an unstarted Manager over the selected
+// backend. op names the public call in a construction failure.
+func build(ctx context.Context, op string, opts Options) (*Manager, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -179,7 +190,7 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 
 	b, err := newBackend(ctx, kind, opts)
 	if err != nil {
-		return nil, &Error{Op: "New", Backend: kind, Err: err}
+		return nil, &Error{Op: op, Backend: kind, Err: err}
 	}
 
 	// noop never touches the host, so it takes no locks.
@@ -187,9 +198,7 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 	if kind != BackendNoop {
 		locker = hostlock.System()
 	}
-	m := newWithBackend(opts, kind, b, locker)
-	m.start()
-	return m, nil
+	return newWithBackend(opts, kind, b, locker), nil
 }
 
 // newWithBackend builds an unstarted Manager around an injected backend and
@@ -628,7 +637,8 @@ func (m *Manager) withHostLock(ctx context.Context, wait time.Duration, fn func(
 // acquireLifetime takes the identity lock without waiting, unless this
 // Manager already holds it. Another live holder is reported as
 // [ErrManagerAlreadyRunning]. The no-op backend has no locker and needs none.
-// Only the worker and, after joining it, Close call this.
+// Its callers are the worker, Close after joining the worker, and Recover on
+// a Manager whose worker never started, so m.lifetime has one user at a time.
 func (m *Manager) acquireLifetime() error {
 	if m.locker == nil || m.lifetime != nil {
 		return nil
@@ -656,7 +666,8 @@ func (m *Manager) owesCleanupLocked() bool {
 }
 
 // releaseLifetime releases the identity lock if held. It is called only by
-// the worker, or by Close after the worker has exited.
+// the worker, by Close after the worker has exited, or by Recover on a
+// Manager whose worker never started.
 func (m *Manager) releaseLifetime() error {
 	if m.lifetime == nil {
 		return nil

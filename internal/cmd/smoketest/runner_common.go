@@ -85,6 +85,28 @@ func assertResetRefused(cfg runConfig, res ExecResult) bool {
 	return false
 }
 
+// Replies of dnsconfigctl recover, matched by whole line like reset's.
+const (
+	recoverRemovedLine = "recover OK"
+	recoverNothingLine = "recover OK (nothing to recover)"
+)
+
+// assertRecover requires a successful recover with the exact reply for
+// whether it should have removed artifacts. The catch-all rows run it after a
+// detached set, which exits without Close the way a crashed process does, and
+// again once the host is clean.
+func assertRecover(cfg runConfig, res ExecResult, removed bool) bool {
+	want := recoverNothingLine
+	if removed {
+		want = recoverRemovedLine
+	}
+	if res.Successful() && hasLine(res.Stdout, want) {
+		return true
+	}
+	cfg.Log("    recover: want %q, got %s", want, res.String())
+	return false
+}
+
 // altSearchDomain distinguishes the replacement configuration so cleanup
 // checks can detect artifacts from either apply.
 const altSearchDomain = "alt.dnsconfig-smoke.example."

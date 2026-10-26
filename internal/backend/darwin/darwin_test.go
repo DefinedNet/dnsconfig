@@ -1770,15 +1770,59 @@ func TestFailedRemoveCallsCountAsChange(t *testing.T) {
 	assert.Equal(t, backend.Result{}, res)
 }
 
-// hasOwned reports whether discovery finds any State key or resolver-directory
+// hasOwned reports whether the probe finds any State key or resolver-directory
 // entry attributed to the test identity.
 func hasOwned(t *testing.T, b *Backend) bool {
 	t.Helper()
-	keys, err := b.listStateKeyNames(context.Background())
+	has, err := b.HasArtifacts(context.Background())
 	require.NoError(t, err)
-	entries, err := b.scanResolverDir()
-	require.NoError(t, err)
-	return len(keys)+len(b.ownedNames(entries)) > 0
+	return has
+}
+
+// TestHasArtifactsFindsPredecessor: a fresh backend finds what a crashed
+// instance of its identity left, through either kind of artifact, without
+// writing or starting the notification child, and reports an unanswered key
+// list rather than an empty store.
+func TestHasArtifactsFindsPredecessor(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  backend.Config
+	}{
+		{"catch-all keys", catchAllConfig()},
+		{"split files and keys", splitConfig()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newTestFS(t)
+			fake := newScutilFake()
+			require.NoError(t, trySet(newTestBackend(t, fs, fake), tc.cfg))
+
+			b := newTestBackend(t, fs, fake)
+			before := observeHost(fs, fake)
+			assert.True(t, hasOwned(t, b))
+			assertQuiet(t, observeHost(fs, fake).since(before), "the probe writes nothing")
+			b.mu.Lock()
+			assert.Nil(t, b.source, "the probe starts no notification child")
+			b.mu.Unlock()
+		})
+	}
+
+	t.Run("list failure", func(t *testing.T) {
+		fake := newScutilFake()
+		fake.listErr = errInjectedList
+		_, err := newTestBackend(t, newTestFS(t), fake).HasArtifacts(context.Background())
+		require.ErrorIs(t, err, errInjectedList)
+	})
+
+	t.Run("canceled ctx", func(t *testing.T) {
+		fs := newTestFS(t)
+		fake := newScutilFake()
+		require.NoError(t, trySet(newTestBackend(t, fs, fake), splitConfig()))
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		has, err := newTestBackend(t, fs, fake).HasArtifacts(ctx)
+		require.ErrorIs(t, err, context.Canceled)
+		assert.False(t, has, "a resolver file must not answer a canceled read")
+	})
 }
 
 func (f *scutilFake) flushCount() int {

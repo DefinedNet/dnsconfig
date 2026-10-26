@@ -30,6 +30,9 @@ func (b *Backend) Clear(context.Context, backend.Attempt) (backend.Result, error
 	return backend.Result{}, nil
 }
 
+// HasArtifacts finds nothing: noop never installs anything.
+func (b *Backend) HasArtifacts(context.Context) (bool, error) { return false, nil }
+
 // ValidateConfig accepts every config: nothing is installed, so no OS limit
 // applies.
 func (b *Backend) ValidateConfig(backend.Config) error { return nil }

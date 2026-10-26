@@ -69,6 +69,14 @@
 // Manager's Clear. Recovery needs the same identity but no saved snapshot or
 // Windows adapter name.
 //
+// [Recover] is the startup recovery for a process whose predecessor under the
+// same identity exited without Close. It reads the host without locks and
+// returns at once when nothing of the identity's remains; otherwise it makes
+// the same final cleanup Close does. NRPT rules, State keys, and resolver
+// files name their identity, and Windows adapter values are attributed
+// through the rules that record the adapter, so callers keep no marker of
+// their own to decide whether recovery is due.
+//
 // Methods are safe for concurrent use and none waits for a converge, except
 // that Close waits for an in-flight attempt to return. The worker takes an
 // OS-released identity lock before its first attempt and keeps it until a

@@ -107,6 +107,30 @@ func Suite(t *testing.T, newFixture Factory) {
 		assertCleanFunc(t, s.Clean, "Clear must remove everything Set installed")
 	})
 
+	t.Run("HasArtifactsReadsOnly", func(t *testing.T) {
+		s := newFixture(t)
+		has, err := s.Backend.HasArtifacts(ctx)
+		require.NoError(t, err)
+		assert.False(t, has, "a fresh host holds nothing of this identity's")
+		_, err = s.Backend.Set(ctx, s.ValidConfig, first)
+		require.NoError(t, err)
+		var before int
+		if s.Writes != nil {
+			before = s.Writes()
+		}
+		has, err = s.Backend.HasArtifacts(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, s.Snapshot != nil, has, "the probe finds what Set installed")
+		if s.Writes != nil {
+			assert.Equal(t, before, s.Writes(), "the probe writes nothing")
+		}
+		_, err = s.Backend.Clear(ctx, first)
+		require.NoError(t, err)
+		has, err = s.Backend.HasArtifacts(ctx)
+		require.NoError(t, err)
+		assert.False(t, has, "Clear leaves nothing to find")
+	})
+
 	t.Run("ClosePreservesSystemState", func(t *testing.T) {
 		s := newFixture(t)
 		if s.Snapshot == nil {

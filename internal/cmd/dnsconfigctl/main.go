@@ -119,6 +119,8 @@ var allCommands = map[string]func(g *globalFlags, args []string) int{
 	"detect": runDetect,
 	"set":    runSet,
 	"reset":  runReset,
+	// recover is the startup recovery after a crashed predecessor.
+	"recover": runRecover,
 	// The harness uses serve and probe-dns to start and check its sentinel.
 	"serve":     runServe,
 	"probe-dns": runProbeDNS,

@@ -94,6 +94,8 @@ check, and `LastError` reports failures. It does not test application queries.
   synchronous Windows API calls can exceed it. It does not bound all of
   `Close`; zero selects `DefaultShutdownTimeout`. See the
   [lifecycle examples](example_test.go).
+- After an unclean exit, call `Recover` at startup, before `New`. It writes
+  nothing when the identity left nothing behind.
 
 ## Limits
 

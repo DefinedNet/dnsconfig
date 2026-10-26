@@ -82,6 +82,12 @@ func (f *fakeHost) Clear(_ context.Context, _ backend.Attempt) (backend.Result, 
 	return res, nil
 }
 
+func (f *fakeHost) HasArtifacts(context.Context) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.installed != nil, nil
+}
+
 func (f *fakeHost) ValidateConfig(backend.Config) error { return nil }
 
 func (f *fakeHost) Changes() <-chan struct{} { return f.changes }

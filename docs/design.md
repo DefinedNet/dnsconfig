@@ -159,6 +159,30 @@ live. Windows completes three operations even after cancellation:
 See the [recovery example](../example_test.go) for recovery after a failed
 Close.
 
+`Recover` decides at startup whether a crashed predecessor left anything,
+without state of its own. NRPT rules, State keys, and resolver files name
+their identity, and Windows adapter values are attributed through the rules
+that record the adapter, so the host is the record. A caller-side marker file
+would need its own durable location and could disagree with the host after a
+crash between the two writes or a manual cleanup. The probe reads the
+evidence Clear acts on: owned resolver files, then the identity's State keys
+on macOS, and the identity's rules in both NRPT stores on Windows. It takes
+no lock and starts no change source, so a clean start costs only those reads
+and never waits behind a live peer. When it finds something, Recover runs
+Close's final cleanup and returns `ErrManagerAlreadyRunning` if a live holder
+keeps the identity, since the caller asked for removal and got none.
+
+Recover sees only what Clear can attribute. On Windows, Set writes a rule
+naming the adapter before any adapter value, and Clear clears the adapter
+before deleting its rules, so a crash at any write leaves a rule to find. A
+reload or policy notification still owed when a predecessor exited after
+deleting its last rule leaves nothing to find, so a later Recover cannot
+retry it and reports no change. A removed Group Policy rule then stays in
+effect until the DNS Client is notified or restarted, as described under
+[policy notification](#policy-changes-require-notification); a removed
+adapter value is applied on the DNS Client's own schedule, as described under
+[adapter reloads][adapter-reloads].
+
 ## macOS owns separate keys and resolver files
 
 macOS uses identity-scoped synthetic SCDynamicStore State keys for catch-all

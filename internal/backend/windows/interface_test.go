@@ -304,6 +304,18 @@ func TestCrashAtEveryApplyWriteRemainsRecoverable(t *testing.T) {
 					reg.arm(-1)
 					restarted, err := newTestBackend(context.Background(), Options{Registry: reg})
 					require.NoError(t, err)
+					// The probe must see every crash point that left an
+					// adapter value, or a startup Recover would skip it.
+					writes := len(reg.writes)
+					has, err := restarted.HasArtifacts(context.Background())
+					require.NoError(t, err)
+					assert.Equal(t, writes, len(reg.writes), "the probe writes nothing")
+					if !has {
+						for _, path := range adapterPaths(testGUID) {
+							assert.NotContains(t, reg.keys[path], searchListValue)
+							assert.NotContains(t, reg.keys[path], nameServerValue)
+						}
+					}
 					require.NoError(t, restarted.clearGoal(context.Background()))
 					require.Empty(t, reg.ourRuleNames())
 					require.Empty(t, reg.gpRuleNames())

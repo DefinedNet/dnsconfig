@@ -45,6 +45,13 @@ type Backend interface {
 	// nothing.
 	Clear(ctx context.Context, attempt Attempt) (Result, error)
 
+	// HasArtifacts reports whether the host holds any artifact Clear would
+	// attribute to this identity. It is the read half of Clear: it writes
+	// nothing, takes no lock, and starts no change-signal source, so a
+	// process can decide at startup whether a crashed predecessor left
+	// anything to remove. An inspection failure returns an error.
+	HasArtifacts(ctx context.Context) (bool, error)
+
 	// Changes returns a channel that receives a value whenever the host may
 	// have changed in a way that can affect owned artifacts. Sends are
 	// coalesced and never block; the channel carries no payload because the

@@ -73,6 +73,11 @@ func windowsResetArgs() []string {
 	return []string{windowsBinaryExec, "-backend", "windows", "-interface", windowsInterfaceName, "reset"}
 }
 
+// windowsRecoverArgs is the dnsconfigctl.exe recover invocation.
+func windowsRecoverArgs() []string {
+	return []string{windowsBinaryExec, "-backend", "windows", "recover"}
+}
+
 // psQuote single-quotes s for embedding in a PowerShell command, doubling
 // any embedded single quotes per PowerShell's escaping rule.
 func psQuote(s string) string {
@@ -483,16 +488,33 @@ func executeRowWindows(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 		cfg.Log("    second-cycle set failed: %s", res.String())
 		return ri.failOrKeep("cycle2-set")
 	}
-	res = cfg.exec(ctx, 90*time.Second, windowsResetArgs()...)
-	if !res.Successful() {
-		cfg.Log("    second-cycle reset failed: %s", res.String())
-		return ri.failOrKeep("cycle2-reset")
-	}
-	if !assertResetPerformedRevert(cfg, res) {
-		return ri.failOrKeep("cycle2-reset-no-op")
+	if row.Split {
+		res = cfg.exec(ctx, 90*time.Second, windowsResetArgs()...)
+		if !res.Successful() {
+			cfg.Log("    second-cycle reset failed: %s", res.String())
+			return ri.failOrKeep("cycle2-reset")
+		}
+		if !assertResetPerformedRevert(cfg, res) {
+			return ri.failOrKeep("cycle2-reset-no-op")
+		}
+	} else {
+		// Catch-all rows clean up the second cycle through Recover, as a
+		// consumer starting after a crash would. It is given no interface
+		// name: the rules' recovery records identify the adapter.
+		res = cfg.exec(ctx, 90*time.Second, windowsRecoverArgs()...)
+		if !assertRecover(cfg, res, true) {
+			return ri.failOrKeep("cycle2-recover")
+		}
 	}
 	if stage := postResetCheck("post2"); stage != "" {
 		return ri.failOrKeep("cycle2-" + stage)
+	}
+	if !row.Split {
+		res = cfg.exec(ctx, 90*time.Second, windowsRecoverArgs()...)
+		if !assertRecover(cfg, res, false) {
+			return ri.failOrKeep("cycle2-recover-again")
+		}
+		cfg.Log("    recover removed the detached set's configuration; a second recover found nothing")
 	}
 	cfg.Log("    second apply/revert cycle OK")
 

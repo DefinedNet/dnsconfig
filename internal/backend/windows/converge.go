@@ -527,6 +527,23 @@ func (b *Backend) clearArtifacts(ctx context.Context, mut *mutation) error {
 	return b.clearRules(ctx, bases, mut)
 }
 
+// HasArtifacts implements backend.Backend by listing this identity's rules,
+// active or staged, in both NRPT stores, as clearRules does. Every adapter
+// value Set writes follows a rule naming that adapter, so the rules are the
+// evidence Clear needs.
+func (b *Backend) HasArtifacts(ctx context.Context) (bool, error) {
+	for _, base := range []string{gpoNrptBase, nrptBase} {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		names, err := b.ownedRuleNames(base)
+		if err != nil || len(names) > 0 {
+			return len(names) > 0, err
+		}
+	}
+	return false, nil
+}
+
 // clearRules deletes this identity's rules from bases, GP store first when
 // it is listed. If any GP rule survives, the local copies stay too, for the
 // reason clearArtifacts retires the container first.

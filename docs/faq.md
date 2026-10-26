@@ -114,7 +114,7 @@ A `Config` sends every name it covers to one set of nameservers. It is either a 
 
 Run one Manager for each set of nameservers, each with its own `Options.Identity`: for example, one catch-all identity and one split identity for `corp.example`. The OS picks which nameservers answer each name.
 
-- dnsconfig does not sit in the query path, so installed settings keep sending queries to your resolvers until cleanup completes, even after a crash. Recover with a fresh Manager's Clear under the same identity.
+- dnsconfig does not sit in the query path, so installed settings keep sending queries to your resolvers until cleanup completes, even after a crash. Call `Recover` at startup under the same identity to remove them.
 - The OS keeps its caching, per-interface resolvers, and encrypted DNS settings.
 - Two identities can't claim the same match domain, and only one can hold the catch-all. The second is refused with `ErrConflict` and retried. On Windows each identity also needs its own `InterfaceName` adapter, refused the same way when shared.
 - A catch-all identity alongside a split identity has not been tested on either OS.

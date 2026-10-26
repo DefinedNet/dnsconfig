@@ -56,7 +56,7 @@ runs its recovery steps unless the Go harness's `-keep-on-failure` flag is set.
 | Backend and recovery tests | Injected read/write failures, partial cleanup, adapter recovery, and ownership boundaries. |
 | Native tests | OS APIs and watcher lifecycles on their host platform. |
 | [Go examples][examples] | Compilation; DNS-mutating examples do not run. |
-| Smoke matrices | Apply, queries, replacement, cross-process cleanup; an idle Manager leaves installed DNS intact. |
+| Smoke matrices | Apply, queries, replacement, cross-process cleanup; an idle Manager leaves installed DNS intact; catch-all rows remove a process's leftovers with `Recover` and find nothing on a second call. |
 
 [Worker]: ../worker_test.go
 [suite]: ../internal/backend/backendtest/suite.go
