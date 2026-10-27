@@ -156,7 +156,7 @@ func newServeHandler(records map[string][]netip.Addr, delay time.Duration, log *
 			time.Sleep(delay)
 		}
 		if err := w.WriteMsg(resp); err != nil {
-			log.Warn("serve write reply failed", "err", err)
+			log.Warn("serve write reply failed", "error", err)
 		}
 	})
 }

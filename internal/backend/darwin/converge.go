@@ -261,21 +261,21 @@ func (b *Backend) logChanges(attempt backend.Attempt, c *convergeChanges, err er
 	if attempt.Converged && len(c.keysCreated) > 0 {
 		msg = "darwin: converge recreated dynamic-store keys"
 	}
-	attrs := []any{"new_goal", attempt.NewGoal, "converged", attempt.Converged}
+	attrs := []any{"newGoal", attempt.NewGoal, "converged", attempt.Converged}
 	add := func(key string, values []string) {
 		if len(values) > 0 {
 			attrs = append(attrs, key, values)
 		}
 	}
-	add("keys_created", c.keysCreated)
-	add("keys_updated", c.keysUpdated)
-	add("keys_removed", c.keysRemoved)
-	add("files_written", c.filesWritten)
-	add("files_removed", c.filesRemoved)
+	add("keysCreated", c.keysCreated)
+	add("keysUpdated", c.keysUpdated)
+	add("keysRemoved", c.keysRemoved)
+	add("filesWritten", c.filesWritten)
+	add("filesRemoved", c.filesRemoved)
 	level := slog.LevelInfo
 	if err != nil {
 		level = slog.LevelWarn
-		attrs = append(attrs, "err", err)
+		attrs = append(attrs, "error", err)
 	}
 	b.logger.Log(context.Background(), level, msg, attrs...)
 }
@@ -410,7 +410,7 @@ func (b *Backend) publishResolverFile(name string, body []byte) error {
 		if rmErr := b.fs.Remove(tmp); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 			// Discovery attributes the staging name, so a later converge or
 			// Clear removes it.
-			b.logger.Warn("darwin: could not remove resolver staging file", "path", tmp, "err", rmErr)
+			b.logger.Warn("darwin: could not remove resolver staging file", "path", tmp, "error", rmErr)
 		}
 		return err
 	}

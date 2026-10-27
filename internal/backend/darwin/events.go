@@ -60,7 +60,7 @@ func (b *Backend) ensureEventSource() {
 	if err != nil {
 		b.sourceErr = err
 		if wasHealthy {
-			b.logger.Warn("darwin: scutil notification source unavailable; drift is found only by periodic converges", "err", err)
+			b.logger.Warn("darwin: scutil notification source unavailable; drift is found only by periodic converges", "error", err)
 		}
 	} else {
 		b.source = src
@@ -68,7 +68,7 @@ func (b *Backend) ensureEventSource() {
 	}
 	b.mu.Unlock()
 	if dead != nil {
-		b.logger.Warn("darwin: scutil notification child exited; restarted it", "err", dead.err, "restarted", err == nil)
+		b.logger.Warn("darwin: scutil notification child exited; restarted it", "error", dead.err, "restarted", err == nil)
 		dead.stop()
 	}
 }

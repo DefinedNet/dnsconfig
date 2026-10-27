@@ -97,7 +97,7 @@ func (b *Backend) releaseSources() {
 			continue
 		}
 		if err := s.stop(); err != nil {
-			b.logger.Warn("windows: release change watcher", "err", err)
+			b.logger.Warn("windows: release change watcher", "error", err)
 		}
 	}
 }
@@ -187,7 +187,7 @@ func (b *Backend) ensurePolicyWatch() error {
 }
 
 func (b *Backend) policyUnavailable(err error) error {
-	b.logger.Warn("machine-policy watcher unavailable; Group Policy changes require monitoring", "err", err)
+	b.logger.Warn("machine-policy watcher unavailable; Group Policy changes require monitoring", "error", err)
 	return err
 }
 
@@ -213,7 +213,7 @@ func (b *Backend) ensureRegistryWatch(target adapterTarget) {
 		// A close failure leaks at most one handle set; the replacement
 		// below still restores coverage.
 		if err := current.stop(); err != nil {
-			b.logger.Warn("windows: release registry watcher", "err", err)
+			b.logger.Warn("windows: release registry watcher", "error", err)
 		}
 	}
 	w, err := b.regWatchFactory(keys)
@@ -226,7 +226,7 @@ func (b *Backend) ensureRegistryWatch(target adapterTarget) {
 }
 
 func (b *Backend) registryUnavailable(err error) {
-	b.logger.Warn("registry change watcher unavailable; loss of NRPT rules or adapter values relies on periodic checks", "err", err)
+	b.logger.Warn("registry change watcher unavailable; loss of NRPT rules or adapter values relies on periodic checks", "error", err)
 }
 
 func (b *Backend) registryStopped(err error) {
