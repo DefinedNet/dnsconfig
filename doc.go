@@ -13,8 +13,9 @@
 // On macOS, New declines DNS management for a process that is not root: it
 // logs one Info line through Options.Logger, Set returns
 // [ErrConfigurationDeclined], and Clear converges without touching the host.
-// New logs a warning when the Windows process is not LocalSystem or its
-// identity cannot be checked; construction still succeeds.
+// On Windows, the first attempt that writes to the host logs a warning when
+// the process is not LocalSystem or its identity cannot be checked; the
+// attempt proceeds.
 // The OS tools the backends invoke are resolved by absolute path and never
 // through PATH. Unsupported platforms select [BackendNoop], which refuses
 // [Manager.Set] unless explicitly forced.
