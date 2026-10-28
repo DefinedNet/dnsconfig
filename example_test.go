@@ -79,6 +79,9 @@ func ExampleManager_Clear_recovery() {
 	for {
 		s := m.Status()
 		switch {
+		case errors.Is(s.LastError, dnsconfig.ErrConfigurationDeclined):
+			log.Printf("DNS management declined; nothing was checked: %v", s.LastError)
+			return
 		case s.Converged && s.LastChangedAt.IsZero():
 			log.Print("no DNS configuration attributable to myapp was found")
 			return

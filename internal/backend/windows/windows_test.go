@@ -109,6 +109,35 @@ func TestExecutionIdentityWarningAtFirstWrite(t *testing.T) {
 	}
 }
 
+// TestExecutionIdentityWarningOnReloadOnlySet covers a restart whose
+// predecessor's artifacts already match, so the reload trigger is the only
+// write and must still be preceded by the diagnostic.
+func TestExecutionIdentityWarningOnReloadOnlySet(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	require.NoError(t, h.setGoal(ctx, catchAll(t)))
+	require.NoError(t, h.Close())
+
+	var logs bytes.Buffer
+	b, err := newTestBackend(ctx, Options{
+		Registry:      h.reg,
+		Logger:        slog.New(slog.NewTextHandler(&logs, nil)),
+		IsLocalSystem: func() (bool, error) { return false, nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = b.Close() })
+	h.reg.writes = nil
+	res, err := b.Set(ctx, catchAll(t), backend.Attempt{NewGoal: true})
+	require.NoError(t, err)
+	assert.Equal(t, backend.Result{}, res, "matching values need no write")
+	assert.Equal(t, []string{
+		"SetString " + nrptBase + " " + reloadTriggerValue,
+		"DeleteValue " + nrptBase + " " + reloadTriggerValue,
+	}, h.reg.writes, "the only writes are one reload trigger")
+	assert.Equal(t, 1, strings.Count(logs.String(), "level=WARN"), logs.String())
+	assert.Contains(t, logs.String(), "running without it is best effort")
+}
+
 func TestNewRequiresLogger(t *testing.T) {
 	_, err := New(context.Background(), Options{Identity: testIdentity, Registry: newFakeRegistry()})
 	require.Error(t, err)

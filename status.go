@@ -31,7 +31,8 @@ type Status struct {
 
 	// Converged reports that the most recent attempt at the current goal
 	// passed its artifact checks and completed every owed side-effect
-	// request, and no newer goal has been recorded since. Later drift is
+	// request, and no newer goal has been recorded since. A declined
+	// Manager checks nothing; see LastError. Later drift is
 	// found by a change signal or periodic check. Close's final cleanup,
 	// when it runs, counts as an attempt: afterwards Converged is false for
 	// a Set goal and reports whether that cleanup succeeded for a Clear goal.

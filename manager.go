@@ -80,7 +80,7 @@ type Manager struct {
 	declined error
 
 	// locker issues the per-identity lifetime lock and the host lock. It is
-	// nil for noop, which never touches the host.
+	// nil for noop and a declined Manager, which never touch the host.
 	locker hostlock.Locker
 	// lifetime is held from the first attempt at a goal until a Clear
 	// converges or Close finishes. Only the worker touches it while running;
@@ -165,7 +165,9 @@ type attemptJob struct {
 // Invalid Options are returned as-is. Construction failures are wrapped in
 // *Error, with ErrInvalidOptions for a backend absent on this OS. No backend
 // touches the host at construction or needs Options.InterfaceName; Windows
-// checks it at Set.
+// checks it at Set. A host this process cannot manage, such as macOS without
+// root, gets a declined Manager instead of an error; see
+// [ErrConfigurationDeclined].
 func New(ctx context.Context, opts Options) (*Manager, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err

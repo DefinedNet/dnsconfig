@@ -226,7 +226,7 @@ type Options struct {
 	Logger *slog.Logger
 
 	// IsLocalSystem checks the execution identity for the diagnostic logged
-	// before the first write.
+	// before the first registry write, including a reload trigger.
 	// Nil uses the process token on Windows and skips the check elsewhere.
 	IsLocalSystem func() (bool, error)
 
@@ -365,7 +365,7 @@ func New(_ context.Context, opts Options) (*Backend, error) {
 }
 
 // warnIdentityOnce logs the execution-identity diagnostic before the first
-// write. Every Windows process builds a backend, but only one that writes
+// registry write, from mutation.begin and reload. Every Windows process builds a backend, but only one that writes
 // can leave Group Policy rules effective after cleanup.
 func (b *Backend) warnIdentityOnce() {
 	check := b.checkIdentity
@@ -469,6 +469,9 @@ func (b *Backend) reload(ctx context.Context, mut *mutation) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A reload can be an attempt's only write, when a predecessor's artifacts
+	// already match.
+	b.warnIdentityOnce()
 	if err := b.reg.SetString(nrptBase, reloadTriggerValue, "1"); err != nil {
 		return fmt.Errorf("windows: trigger adapter reload: %w", err)
 	}
