@@ -62,9 +62,6 @@ type Options struct {
 	Runner runner.Runner
 	// Logger receives non-fatal warnings. It is required.
 	Logger *slog.Logger
-	// IsRoot reports whether the process runs as root, for the startup
-	// diagnostic. Nil checks the effective user ID.
-	IsRoot func() bool
 }
 
 type stateKeyConfig struct {
@@ -120,13 +117,6 @@ func New(_ context.Context, opts Options) (*Backend, error) {
 	fs := opts.FS
 	if fs == nil {
 		fs = backend.DiskFS{}
-	}
-	isRoot := opts.IsRoot
-	if isRoot == nil {
-		isRoot = func() bool { return os.Geteuid() == 0 }
-	}
-	if !isRoot() {
-		opts.Logger.Warn("darwin: DNS configuration requires root for the dynamic store, /etc/resolver, and the lock directory; without it every Set and Clear attempt is refused before writing")
 	}
 	r := opts.Runner
 	if r == nil {

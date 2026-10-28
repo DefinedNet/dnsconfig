@@ -31,7 +31,7 @@ func (h *sharedHost) backend(identity string) *Backend {
 	if b, ok := h.backends[identity]; ok {
 		return b
 	}
-	b, err := New(context.Background(), Options{Identity: identity, FS: h.fs, Runner: h.fake, Logger: discardLogger(), IsRoot: asRoot})
+	b, err := New(context.Background(), Options{Identity: identity, FS: h.fs, Runner: h.fake, Logger: discardLogger()})
 	require.NoError(h.t, err)
 	useFS(b, h.fs)
 	h.t.Cleanup(func() { _ = b.Close() })

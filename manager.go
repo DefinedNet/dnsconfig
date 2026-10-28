@@ -74,8 +74,10 @@ type Manager struct {
 	logger  *slog.Logger
 	kind    BackendKind
 	backend backend.Backend
-	// declined distinguishes unsupported hosts from an explicitly forced noop.
-	declined bool
+	// declined, when non-nil, is the ErrConfigurationDeclined refusal for a
+	// host this process cannot manage. It distinguishes those hosts from an
+	// explicitly forced noop.
+	declined error
 
 	// locker issues the per-identity lifetime lock and the host lock. It is
 	// nil for noop, which never touches the host.
@@ -177,6 +179,18 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 		kind = Detect()
 	}
 
+	// A host this process cannot write gets the no-op backend and no locks,
+	// so Clear converges without attempts that could only fail and retry.
+	if reason := nativeDeclined(kind); reason != nil {
+		opts.Logger.Info("dnsconfig: DNS management declined",
+			slog.String("backend", string(kind)), slog.Any("reason", reason))
+		b, _ := newBackend(ctx, BackendNoop, opts)
+		m := newWithBackend(opts, kind, b, nil)
+		m.declined = wrapSentinel(ErrConfigurationDeclined, reason)
+		m.start()
+		return m, nil
+	}
+
 	b, err := newBackend(ctx, kind, opts)
 	if err != nil {
 		return nil, &Error{Op: "New", Backend: kind, Err: err}
@@ -199,12 +213,16 @@ func newWithBackend(opts Options, kind BackendKind, b backend.Backend, locker ho
 	if opts.ShutdownTimeout == 0 {
 		opts.ShutdownTimeout = DefaultShutdownTimeout
 	}
+	var declined error
+	if kind == BackendNoop && opts.ForceBackend != BackendNoop {
+		declined = ErrConfigurationDeclined
+	}
 	return &Manager{
 		opts:            opts,
 		logger:          opts.Logger,
 		kind:            kind,
 		backend:         b,
-		declined:        kind == BackendNoop && opts.ForceBackend != BackendNoop,
+		declined:        declined,
 		locker:          locker,
 		clock:           realClock{},
 		hostLockTimeout: hostLockAcquireTimeout,
@@ -237,7 +255,8 @@ func wrapSentinel(sentinel, err error) error {
 // alone, are returned directly
 // without an [Error] wrapper. The other refusals record no goal:
 // [ErrClosed] after Close, [ErrConfigurationDeclined] when
-// detection selected the no-op backend, and [ErrInterfaceRequired] on Windows
+// detection selected the no-op backend or the process lacks the privilege
+// the backend needs, and [ErrInterfaceRequired] on Windows
 // without Options.InterfaceName. The last two are also recorded in
 // Status.LastError.
 //
@@ -259,8 +278,8 @@ func (m *Manager) Set(cfg Config) error {
 	if m.st.closed {
 		return &Error{Op: "Set", Backend: m.kind, Err: ErrClosed}
 	}
-	if m.declined {
-		return m.refuseSetLocked(ErrConfigurationDeclined)
+	if m.declined != nil {
+		return m.refuseSetLocked(m.declined)
 	}
 	// Recovery records identify the adapter for Clear, but a Set has no
 	// adapter to write without the caller naming one.

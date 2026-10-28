@@ -56,9 +56,13 @@ var (
 
 	// ErrConfigurationDeclined is returned by Set when the active backend
 	// applies nothing and the caller did not ask for that. Detection answers
-	// BackendNoop on unsupported platforms. Set records no goal. Explicitly
-	// selecting BackendNoop through Options.ForceBackend permits a goal that
-	// converges without touching the host.
+	// BackendNoop on unsupported platforms, and New declines the macOS backend
+	// for a process that is not root, since every write it would attempt
+	// needs root. A declined macOS Manager names BackendDarwin in its errors,
+	// its refusal says why, and its Clear converges without touching the host or
+	// taking locks. Set records no goal. Explicitly selecting BackendNoop
+	// through Options.ForceBackend permits a goal that converges without
+	// touching the host.
 	//
 	// Retrying on the same Manager cannot change this condition.
 	ErrConfigurationDeclined = errors.New("backend applies no DNS configuration")
