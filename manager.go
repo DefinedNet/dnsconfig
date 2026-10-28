@@ -317,7 +317,9 @@ func (m *Manager) refuseSetLocked(cause error) error {
 // recovery does not need InterfaceName or a saved snapshot, and clears that
 // adapter's DNS values rather than restoring older ones. Discovering nothing
 // attributable is a successful Clear, so a setting whose ownership evidence
-// was lost stays in place.
+// was lost stays in place. A Manager that declined DNS management converges
+// a Clear without touching the host; Status keeps [ErrConfigurationDeclined]
+// in LastError and LastConvergedCleared false.
 //
 // Clear returns [ErrClosed] after Close and otherwise nil. Calling it while
 // Clear is already the goal is a no-op.
@@ -830,6 +832,14 @@ func (m *Manager) Status() Status {
 		LastError:            m.st.lastErr,
 		LastChangedAt:        m.st.lastChangedAt,
 		LastConvergedCleared: m.st.lastConvergedCleared,
+	}
+	// A declined Manager verifies nothing, so a converged Clear must not read
+	// as a clean host; the refusal stays visible for the Manager's life.
+	if m.declined != nil {
+		if s.LastError == nil {
+			s.LastError = &Error{Op: "New", Backend: m.kind, Err: m.declined}
+		}
+		s.LastConvergedCleared = false
 	}
 	if m.st.goal == GoalSet {
 		s.Desired = cloneConfig(m.st.desired)

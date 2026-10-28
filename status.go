@@ -41,8 +41,11 @@ type Status struct {
 	// Op "Converge", or of Close, or a Set refusal that Set also returned.
 	// After a Close that left a live holder's configuration in place it
 	// includes [ErrManagerAlreadyRunning] with Op "Close", which Close
-	// itself does not return. It is nil after a successful attempt;
-	// errors.Is and errors.As reach the cause.
+	// itself does not return. It is nil after a successful attempt, except
+	// on a Manager that declined DNS management: from New on it holds
+	// [ErrConfigurationDeclined], as Op "New" or a Set refusal, because
+	// nothing on the host was checked. errors.Is and errors.As reach the
+	// cause.
 	// Before Close the worker retries a failed attempt with backoff; Set
 	// refusals and Close's failure are not retried.
 	LastError error
@@ -55,6 +58,7 @@ type Status struct {
 
 	// LastConvergedCleared reports that the most recent successful attempt,
 	// including Close's final cleanup, was a Clear. It is false before any
-	// attempt succeeds.
+	// attempt succeeds and always false on a Manager that declined DNS
+	// management, which removes nothing.
 	LastConvergedCleared bool
 }

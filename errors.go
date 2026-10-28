@@ -60,7 +60,9 @@ var (
 	// for a process that is not root, since every write it would attempt
 	// needs root. A declined macOS Manager names BackendDarwin in its errors,
 	// its refusal says why, and its Clear converges without touching the host or
-	// taking locks. Set records no goal. Explicitly selecting BackendNoop
+	// taking locks. Set records no goal. Status.LastError holds this error
+	// from New on and LastConvergedCleared stays false, since a converged
+	// Clear checked nothing. Explicitly selecting BackendNoop
 	// through Options.ForceBackend permits a goal that converges without
 	// touching the host.
 	//

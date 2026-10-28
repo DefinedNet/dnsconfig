@@ -35,6 +35,11 @@ func TestNew_DarwinWithoutRootDeclines(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
+	s := m.Status()
+	require.ErrorIs(t, s.LastError, ErrConfigurationDeclined, "the refusal is visible from New on")
+	assert.ErrorContains(t, s.LastError, "requires root")
+	assert.False(t, s.LastConvergedCleared)
+
 	assert.Equal(t, BackendDarwin, m.kind)
 	assert.Nil(t, m.locker, "a declined Manager takes no host locks")
 	assert.IsType(t, &noop.Backend{}, m.backend, "the darwin backend is never built")
@@ -45,7 +50,7 @@ func TestNew_DarwinWithoutRootDeclines(t *testing.T) {
 	var e *Error
 	require.ErrorAs(t, err, &e)
 	assert.Equal(t, BackendDarwin, e.Backend)
-	s := m.Status()
+	s = m.Status()
 	assert.Equal(t, GoalNone, s.Goal)
 	assert.Same(t, err, s.LastError)
 
@@ -53,9 +58,14 @@ func TestNew_DarwinWithoutRootDeclines(t *testing.T) {
 	s = waitStatus(t, m, func(s Status) bool { return s.Converged })
 	assert.Equal(t, GoalClear, s.Goal)
 	assert.True(t, s.LastChangedAt.IsZero(), "a declined Clear never changes the host")
-	assert.NoError(t, s.LastError)
+	assert.ErrorIs(t, s.LastError, ErrConfigurationDeclined, "a declined Clear verified nothing")
+	assert.False(t, s.LastConvergedCleared)
 
 	require.NoError(t, m.Close())
+	s = m.Status()
+	assert.ErrorIs(t, s.LastError, ErrConfigurationDeclined)
+	assert.ErrorContains(t, s.LastError, "requires root")
+	assert.False(t, s.LastConvergedCleared)
 	out := logs.String()
 	assert.Equal(t, 1, strings.Count(out, "level=INFO"), out)
 	assert.Contains(t, out, "DNS management declined")
