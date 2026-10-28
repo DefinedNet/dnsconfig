@@ -18,7 +18,7 @@ WATCH: ready applied=true
 time=t1 level=DEBUG msg="dnsconfig: change signal" opened=true
 time=t2 level=DEBUG msg="dnsconfig: attempt finished" trigger=signal duration=1s changed=false failed=false
 `
-	testRecreated = `time=t3 level=INFO msg="darwin: converge recreated dynamic-store keys" new_goal=false converged=true
+	testRecreated = `time=t3 level=INFO msg="darwin: converge recreated dynamic-store keys" newGoal=false converged=true
 `
 	// testSignalRepair is the log of a repair the change signal drove.
 	testSignalRepair = testRecreated +
@@ -26,10 +26,10 @@ time=t2 level=DEBUG msg="dnsconfig: attempt finished" trigger=signal duration=1s
 `
 	// testDeliveryRepair is the log of a signal-driven repair of the removed
 	// catch-all key.
-	testDeliveryRepair = `time=t6 level=INFO msg="darwin: converge recreated dynamic-store keys" new_goal=false converged=true
+	testDeliveryRepair = `time=t6 level=INFO msg="darwin: converge recreated dynamic-store keys" newGoal=false converged=true
 time=t7 level=DEBUG msg="dnsconfig: attempt finished" trigger=signal duration=1s changed=true failed=false
 `
-	testChildExited = `time=t5 level=WARN msg="darwin: scutil notification child exited; restarted it" err=EOF restarted=true
+	testChildExited = `time=t5 level=WARN msg="darwin: scutil notification child exited; restarted it" error=EOF restarted=true
 `
 )
 
@@ -155,7 +155,7 @@ func TestMacosWatcherDelivery(t *testing.T) {
 		{
 			name:      "deaf child",
 			repairLog: testSignalRepair,
-			delivery:  "time=t6 level=INFO msg=\"darwin: converge recreated dynamic-store keys\" new_goal=false converged=true\n" + periodic + "\n",
+			delivery:  "time=t6 level=INFO msg=\"darwin: converge recreated dynamic-store keys\" newGoal=false converged=true\n" + periodic + "\n",
 			want:      "watch-deaf",
 			wantLog:   periodic,
 		},

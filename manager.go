@@ -487,7 +487,7 @@ func (m *Manager) converge(job attemptJob) {
 	m.mu.Unlock()
 	if release {
 		if rerr := m.releaseLifetime(); rerr != nil {
-			m.logger.Warn("dnsconfig: releasing identity lock after Clear failed", slog.Any("err", rerr))
+			m.logger.Warn("dnsconfig: releasing identity lock after Clear failed", slog.Any("error", rerr))
 		}
 	}
 }
@@ -557,10 +557,10 @@ func (m *Manager) finishLocked(job attemptJob, res backend.Result, err error, no
 					slog.String("goal", string(job.goal)),
 					slog.String("trigger", job.trigger),
 					slog.Int("attempts", s.attempts),
-					slog.Duration("retry_in", s.backoff),
+					slog.Duration("retryIn", s.backoff),
 					slog.Bool("changed", res.Changed),
 					slog.Bool("pending", res.Pending),
-					slog.Any("err", err))
+					slog.Any("error", err))
 			}
 		}
 		return false
@@ -620,7 +620,7 @@ func (m *Manager) withHostLock(ctx context.Context, wait time.Duration, fn func(
 	}
 	fn()
 	if uerr := h.Unlock(); uerr != nil {
-		m.logger.Warn("dnsconfig: releasing host lock failed", slog.Any("err", uerr))
+		m.logger.Warn("dnsconfig: releasing host lock failed", slog.Any("error", uerr))
 	}
 	return nil
 }
@@ -741,7 +741,7 @@ func (m *Manager) Close() error {
 		case cleanupErr != nil:
 			m.logger.Warn("dnsconfig: cleanup on close failed",
 				slog.String("backend", string(m.kind)),
-				slog.Any("err", cleanupErr))
+				slog.Any("error", cleanupErr))
 		}
 		closeErr := m.backend.Close()
 		// Release after the backend stops, even when cleanup failed: a closed

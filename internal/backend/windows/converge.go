@@ -130,15 +130,15 @@ func (b *Backend) finish(ctx context.Context, op string, mut *mutation, attempt 
 		// The Manager warns for its current goal. A superseded attempt's
 		// failure reaches only Status, since the newer goal rewrites the same
 		// artifacts.
-		b.logger.Debug("windows DNS "+op+" failed", "err", err, "changed", res.Changed, "pending", res.Pending)
+		b.logger.Debug("windows DNS "+op+" failed", "error", err, "changed", res.Changed, "pending", res.Pending)
 	case res.Changed && op == "set":
 		b.logger.Info("windows DNS converged", "store", mut.store,
-			"rules_written", mut.rulesWritten, "rules_removed", mut.rulesRemoved,
-			"adapter_changed", mut.adapter, "gp_container_removed", mut.container, "pending", res.Pending)
+			"rulesWritten", mut.rulesWritten, "rulesRemoved", mut.rulesRemoved,
+			"adapterChanged", mut.adapter, "gpContainerRemoved", mut.container, "pending", res.Pending)
 	case res.Changed:
 		b.logger.Info("windows DNS cleared",
-			"rules_removed", mut.rulesRemoved, "adapter_changed", mut.adapter,
-			"gp_container_removed", mut.container, "pending", res.Pending)
+			"rulesRemoved", mut.rulesRemoved, "adapterChanged", mut.adapter,
+			"gpContainerRemoved", mut.container, "pending", res.Pending)
 	}
 	return res, err
 }
@@ -344,7 +344,7 @@ func (b *Backend) stageRule(base string, i int, rule nrptRule, target adapterTar
 	if !reusable {
 		if base == gpoNrptBase && !mut.gpWarned {
 			mut.gpWarned = true
-			b.logger.Warn("writing NRPT rules to the Group Policy store; overlapping namespaces may change routing", "gpo_path", gpoNrptBase)
+			b.logger.Warn("writing NRPT rules to the Group Policy store; overlapping namespaces may change routing", "gpoPath", gpoNrptBase)
 		}
 		mut.begin(base)
 		if err := b.writeStagedRule(base, i, rule, target); err != nil {
@@ -579,7 +579,7 @@ func (b *Backend) notifyPolicy() error {
 		// Domain membership is a delivery heuristic, not an activation check.
 		joined, jerr := b.domainJoined()
 		if jerr != nil {
-			b.logger.Warn("could not determine domain-join state; policy notification delivery is unconfirmed", "err", jerr)
+			b.logger.Warn("could not determine domain-join state; policy notification delivery is unconfirmed", "error", jerr)
 		}
 		if joined {
 			b.logger.Info("Group Policy refresh requested on a domain-joined host; activation is unverified", "delivery", d.String())
@@ -594,7 +594,7 @@ func (b *Backend) notifyPolicy() error {
 	}
 	if unconfirmed {
 		b.logger.Warn("Group Policy notification delivery is unconfirmed; retaining rules for possible activation on a later refresh",
-			"delivery", d.String(), "err", err)
+			"delivery", d.String(), "error", err)
 	}
 	if d == DeliveryNone {
 		return fmt.Errorf("windows: Group Policy notification request failed: %w", err)
@@ -839,7 +839,7 @@ func (b *Backend) removeRetiredContainer(ctx context.Context, mut *mutation) err
 			return errors.New("windows: foreign policy arrived while retiring the Group Policy NRPT container; restored it")
 		}
 		b.logger.Warn("deleting retired Group Policy NRPT container that holds foreign policy; a new container exists",
-			"retired_path", retiredGPBase, "foreign_rules", foreignRules, "foreign_values", values)
+			"retiredPath", retiredGPBase, "foreignRules", foreignRules, "foreignValues", values)
 	}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {

@@ -136,7 +136,7 @@ func TestHostUnlockFailureIsLogged(t *testing.T) {
 	assert.True(t, s.Converged)
 	assert.NoError(t, s.LastError)
 	assert.False(t, h.lk.Held(hostLockName), "the attempt called Unlock; the fake drops the hold even when Unlock fails")
-	assert.Contains(t, logs.String(), `level=WARN msg="dnsconfig: releasing host lock failed" err="unlock failed"`)
+	assert.Contains(t, logs.String(), `level=WARN msg="dnsconfig: releasing host lock failed" error="unlock failed"`)
 }
 
 // TestSecondManagerTakesOverAfterClose: Close releases the identity so a

@@ -323,7 +323,7 @@ func New(_ context.Context, opts Options) (*Backend, error) {
 		system, err := checkIdentity()
 		switch {
 		case err != nil:
-			logger.Warn("windows: could not verify execution identity; DNS configuration expects LocalSystem", "err", err)
+			logger.Warn("windows: could not verify execution identity; DNS configuration expects LocalSystem", "error", err)
 		case !system:
 			logger.Warn("windows: DNS configuration expects LocalSystem; running without it is best effort, and Group Policy DNS rules may remain effective after cleanup")
 		}
