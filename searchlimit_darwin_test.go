@@ -16,6 +16,7 @@ import (
 // backend refuses a search list that does not fit one scutil line before a
 // goal is recorded, so nothing is applied and Close has nothing to revert.
 func TestSetRejectsSearchListOverScutilLine(t *testing.T) {
+	withRoot(t, true)
 	m, err := New(context.Background(), Options{Identity: "facade-search-limit", ForceBackend: BackendDarwin})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, m.Close()) })

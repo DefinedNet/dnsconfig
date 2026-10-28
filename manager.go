@@ -74,11 +74,13 @@ type Manager struct {
 	logger  *slog.Logger
 	kind    BackendKind
 	backend backend.Backend
-	// declined distinguishes unsupported hosts from an explicitly forced noop.
-	declined bool
+	// declined, when non-nil, is the ErrConfigurationDeclined refusal for a
+	// host this process cannot manage. It distinguishes those hosts from an
+	// explicitly forced noop.
+	declined error
 
 	// locker issues the per-identity lifetime lock and the host lock. It is
-	// nil for noop, which never touches the host.
+	// nil for noop and a declined Manager, which never touch the host.
 	locker hostlock.Locker
 	// lifetime is held from the first attempt at a goal until a Clear
 	// converges or Close finishes. Only the worker touches it while running;
@@ -163,7 +165,9 @@ type attemptJob struct {
 // Invalid Options are returned as-is. Construction failures are wrapped in
 // *Error, with ErrInvalidOptions for a backend absent on this OS. No backend
 // touches the host at construction or needs Options.InterfaceName; Windows
-// checks it at Set.
+// checks it at Set. A host this process cannot manage, such as macOS without
+// root, gets a declined Manager instead of an error; see
+// [ErrConfigurationDeclined].
 func New(ctx context.Context, opts Options) (*Manager, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
@@ -175,6 +179,18 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 	kind := opts.ForceBackend
 	if kind == BackendAuto {
 		kind = Detect()
+	}
+
+	// A host this process cannot write gets the no-op backend and no locks,
+	// so Clear converges without attempts that could only fail and retry.
+	if reason := nativeDeclined(kind); reason != nil {
+		opts.Logger.Info("dnsconfig: DNS management declined",
+			slog.String("backend", string(kind)), slog.Any("reason", reason))
+		b, _ := newBackend(ctx, BackendNoop, opts)
+		m := newWithBackend(opts, kind, b, nil)
+		m.declined = wrapSentinel(ErrConfigurationDeclined, reason)
+		m.start()
+		return m, nil
 	}
 
 	b, err := newBackend(ctx, kind, opts)
@@ -199,12 +215,16 @@ func newWithBackend(opts Options, kind BackendKind, b backend.Backend, locker ho
 	if opts.ShutdownTimeout == 0 {
 		opts.ShutdownTimeout = DefaultShutdownTimeout
 	}
+	var declined error
+	if kind == BackendNoop && opts.ForceBackend != BackendNoop {
+		declined = ErrConfigurationDeclined
+	}
 	return &Manager{
 		opts:            opts,
 		logger:          opts.Logger,
 		kind:            kind,
 		backend:         b,
-		declined:        kind == BackendNoop && opts.ForceBackend != BackendNoop,
+		declined:        declined,
 		locker:          locker,
 		clock:           realClock{},
 		hostLockTimeout: hostLockAcquireTimeout,
@@ -237,7 +257,8 @@ func wrapSentinel(sentinel, err error) error {
 // alone, are returned directly
 // without an [Error] wrapper. The other refusals record no goal:
 // [ErrClosed] after Close, [ErrConfigurationDeclined] when
-// detection selected the no-op backend, and [ErrInterfaceRequired] on Windows
+// detection selected the no-op backend or the process lacks the privilege
+// the backend needs, and [ErrInterfaceRequired] on Windows
 // without Options.InterfaceName. The last two are also recorded in
 // Status.LastError.
 //
@@ -259,8 +280,8 @@ func (m *Manager) Set(cfg Config) error {
 	if m.st.closed {
 		return &Error{Op: "Set", Backend: m.kind, Err: ErrClosed}
 	}
-	if m.declined {
-		return m.refuseSetLocked(ErrConfigurationDeclined)
+	if m.declined != nil {
+		return m.refuseSetLocked(m.declined)
 	}
 	// Recovery records identify the adapter for Clear, but a Set has no
 	// adapter to write without the caller naming one.
@@ -298,7 +319,9 @@ func (m *Manager) refuseSetLocked(cause error) error {
 // recovery does not need InterfaceName or a saved snapshot, and clears that
 // adapter's DNS values rather than restoring older ones. Discovering nothing
 // attributable is a successful Clear, so a setting whose ownership evidence
-// was lost stays in place.
+// was lost stays in place. A Manager that declined DNS management converges
+// a Clear without touching the host; Status keeps [ErrConfigurationDeclined]
+// in LastError and LastConvergedCleared false.
 //
 // Clear returns [ErrClosed] after Close and otherwise nil. Calling it while
 // Clear is already the goal is a no-op.
@@ -811,6 +834,14 @@ func (m *Manager) Status() Status {
 		LastError:            m.st.lastErr,
 		LastChangedAt:        m.st.lastChangedAt,
 		LastConvergedCleared: m.st.lastConvergedCleared,
+	}
+	// A declined Manager verifies nothing, so a converged Clear must not read
+	// as a clean host; the refusal stays visible for the Manager's life.
+	if m.declined != nil {
+		if s.LastError == nil {
+			s.LastError = &Error{Op: "New", Backend: m.kind, Err: m.declined}
+		}
+		s.LastConvergedCleared = false
 	}
 	if m.st.goal == GoalSet {
 		s.Desired = cloneConfig(m.st.desired)

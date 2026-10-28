@@ -34,6 +34,9 @@ type mutation struct {
 // notification for a write to the GP store.
 
 func (x *mutation) begin(base string) {
+	if !x.started {
+		x.b.warnIdentityOnce()
+	}
 	x.started = true
 	x.b.flushOwed = true
 	if base == gpoNrptBase {

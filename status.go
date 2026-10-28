@@ -31,7 +31,8 @@ type Status struct {
 
 	// Converged reports that the most recent attempt at the current goal
 	// passed its artifact checks and completed every owed side-effect
-	// request, and no newer goal has been recorded since. Later drift is
+	// request, and no newer goal has been recorded since. A declined
+	// Manager checks nothing; see LastError. Later drift is
 	// found by a change signal or periodic check. Close's final cleanup,
 	// when it runs, counts as an attempt: afterwards Converged is false for
 	// a Set goal and reports whether that cleanup succeeded for a Clear goal.
@@ -41,8 +42,11 @@ type Status struct {
 	// Op "Converge", or of Close, or a Set refusal that Set also returned.
 	// After a Close that left a live holder's configuration in place it
 	// includes [ErrManagerAlreadyRunning] with Op "Close", which Close
-	// itself does not return. It is nil after a successful attempt;
-	// errors.Is and errors.As reach the cause.
+	// itself does not return. It is nil after a successful attempt, except
+	// on a Manager that declined DNS management: from New on it holds
+	// [ErrConfigurationDeclined], as Op "New" or a Set refusal, because
+	// nothing on the host was checked. errors.Is and errors.As reach the
+	// cause.
 	// Before Close the worker retries a failed attempt with backoff; Set
 	// refusals and Close's failure are not retried.
 	LastError error
@@ -55,6 +59,7 @@ type Status struct {
 
 	// LastConvergedCleared reports that the most recent successful attempt,
 	// including Close's final cleanup, was a Clear. It is false before any
-	// attempt succeeds.
+	// attempt succeeds and always false on a Manager that declined DNS
+	// management, which removes nothing.
 	LastConvergedCleared bool
 }

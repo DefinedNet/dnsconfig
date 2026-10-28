@@ -10,9 +10,14 @@
 // are expected to run as LocalSystem so Group Policy changes can be notified
 // directly; elevated Administrator operation falls back to a full policy
 // refresh; see "Convergence and repair".
-// New logs a warning through Options.Logger when the macOS process is not root,
-// or when the Windows process is not LocalSystem or its identity cannot be
-// checked; construction still succeeds.
+// On macOS, New declines DNS management for a process that is not root: it
+// logs one Info line through Options.Logger, Set returns
+// [ErrConfigurationDeclined], and Clear converges without touching the host.
+// Status.LastError keeps that refusal for the Manager's life, so a converged
+// Clear does not read as a verified clean host.
+// On Windows, the first attempt that writes to the host logs a warning when
+// the process is not LocalSystem or its identity cannot be checked; the
+// attempt proceeds.
 // The OS tools the backends invoke are resolved by absolute path and never
 // through PATH. Unsupported platforms select [BackendNoop], which refuses
 // [Manager.Set] unless explicitly forced.

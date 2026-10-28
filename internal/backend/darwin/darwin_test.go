@@ -522,9 +522,6 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// asRoot keeps the startup diagnostic independent of the test runner's user.
-func asRoot() bool { return true }
-
 func newTestBackend(t *testing.T, fs dirFS, fake runner.Runner) *Backend {
 	t.Helper()
 	b, err := New(context.Background(), Options{
@@ -532,49 +529,10 @@ func newTestBackend(t *testing.T, fs dirFS, fake runner.Runner) *Backend {
 		FS:       fs,
 		Runner:   fake,
 		Logger:   discardLogger(),
-		IsRoot:   asRoot,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = b.Close() })
 	return useFS(b, fs)
-}
-
-func TestNewWarnsWithoutRoot(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		root bool
-		want string
-	}{
-		{name: "root", root: true},
-		{name: "not root", want: "requires root"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var logs bytes.Buffer
-			fs := newTestFS(t)
-			fake := newScutilFake()
-			calls := 0
-			b, err := New(context.Background(), Options{
-				Identity: testIdentity,
-				FS:       fs,
-				Runner:   fake,
-				Logger:   slog.New(slog.NewTextHandler(&logs, nil)),
-				IsRoot: func() bool {
-					calls++
-					return tc.root
-				},
-			})
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = b.Close() })
-			assert.Equal(t, 1, calls)
-			assertQuiet(t, observeHost(fs, fake), "construction must not change DNS")
-			if tc.want == "" {
-				assert.Empty(t, logs.String())
-				return
-			}
-			assert.Equal(t, 1, strings.Count(logs.String(), "level=WARN"))
-			assert.Contains(t, logs.String(), tc.want)
-		})
-	}
 }
 
 var (
@@ -990,7 +948,6 @@ func TestClearLeavesKeysItCannotAttribute(t *testing.T) {
 		FS:       fs,
 		Runner:   fr,
 		Logger:   discardLogger(),
-		IsRoot:   asRoot,
 	})
 	require.NoError(t, err)
 	useFS(b, fs)

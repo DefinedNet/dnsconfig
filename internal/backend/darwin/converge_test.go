@@ -830,7 +830,6 @@ func TestConvergeLogsWhatChanged(t *testing.T) {
 		FS:       fs,
 		Runner:   fake,
 		Logger:   slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		IsRoot:   asRoot,
 	})
 	require.NoError(t, err)
 	useFS(b, fs)

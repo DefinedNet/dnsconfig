@@ -57,7 +57,10 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func TestExecutionIdentityWarningDoesNotAffectLifecycle(t *testing.T) {
+// TestExecutionIdentityWarningAtFirstWrite checks that the LocalSystem
+// diagnostic waits for the first write, so a process that only constructs a
+// backend or clears an empty host logs nothing, and that it is logged once.
+func TestExecutionIdentityWarningAtFirstWrite(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		system bool
@@ -83,28 +86,56 @@ func TestExecutionIdentityWarningDoesNotAffectLifecycle(t *testing.T) {
 			})
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = b.Close() })
-			assert.Empty(t, reg.writes, "construction must not change DNS")
-			if tc.want == "" {
-				assert.Empty(t, logs.String())
-			} else {
-				assert.Contains(t, logs.String(), "level=WARN")
-				assert.Contains(t, logs.String(), tc.want)
-				if tc.err != nil {
-					assert.Contains(t, logs.String(), tc.err.Error())
-				}
-			}
-			startup := logs.String()
-			logs.Reset()
+			require.NoError(t, b.clearGoal(ctx))
+			assert.Empty(t, reg.writes, "an empty host gives Clear nothing to write")
+			assert.Zero(t, calls, "nothing written, nothing checked")
+			assert.NotContains(t, logs.String(), "LocalSystem")
+
 			require.NoError(t, b.setGoal(ctx, catchAll(t)))
 			require.NoError(t, b.clearGoal(ctx))
+			require.NoError(t, b.setGoal(ctx, catchAll(t)))
 			require.NoError(t, b.Close())
 			assert.Equal(t, 1, calls)
-			assert.NotContains(t, logs.String(), "expects LocalSystem")
-			if tc.want != "" {
-				assert.Equal(t, 1, strings.Count(startup, "level=WARN"))
+			if tc.want == "" {
+				assert.NotContains(t, logs.String(), "level=WARN")
+				return
+			}
+			assert.Equal(t, 1, strings.Count(logs.String(), "level=WARN"), logs.String())
+			assert.Contains(t, logs.String(), tc.want)
+			if tc.err != nil {
+				assert.Contains(t, logs.String(), tc.err.Error())
 			}
 		})
 	}
+}
+
+// TestExecutionIdentityWarningOnReloadOnlySet covers a restart whose
+// predecessor's artifacts already match, so the reload trigger is the only
+// write and must still be preceded by the diagnostic.
+func TestExecutionIdentityWarningOnReloadOnlySet(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	require.NoError(t, h.setGoal(ctx, catchAll(t)))
+	require.NoError(t, h.Close())
+
+	var logs bytes.Buffer
+	b, err := newTestBackend(ctx, Options{
+		Registry:      h.reg,
+		Logger:        slog.New(slog.NewTextHandler(&logs, nil)),
+		IsLocalSystem: func() (bool, error) { return false, nil },
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = b.Close() })
+	h.reg.writes = nil
+	res, err := b.Set(ctx, catchAll(t), backend.Attempt{NewGoal: true})
+	require.NoError(t, err)
+	assert.Equal(t, backend.Result{}, res, "matching values need no write")
+	assert.Equal(t, []string{
+		"SetString " + nrptBase + " " + reloadTriggerValue,
+		"DeleteValue " + nrptBase + " " + reloadTriggerValue,
+	}, h.reg.writes, "the only writes are one reload trigger")
+	assert.Equal(t, 1, strings.Count(logs.String(), "level=WARN"), logs.String())
+	assert.Contains(t, logs.String(), "running without it is best effort")
 }
 
 func TestNewRequiresLogger(t *testing.T) {

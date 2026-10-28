@@ -225,7 +225,8 @@ type Options struct {
 	// Logger receives structured diagnostics. It is required.
 	Logger *slog.Logger
 
-	// IsLocalSystem checks the execution identity for the startup diagnostic.
+	// IsLocalSystem checks the execution identity for the diagnostic logged
+	// before the first registry write, including a reload trigger.
 	// Nil uses the process token on Windows and skips the check elsewhere.
 	IsLocalSystem func() (bool, error)
 
@@ -278,6 +279,10 @@ type Backend struct {
 	// The fields from here to mu are touched only by Set and Clear, which
 	// the Manager never runs concurrently.
 
+	// checkIdentity is the LocalSystem check warnIdentityOnce runs, nil once
+	// it has run or where no check exists.
+	checkIdentity func() (bool, error)
+
 	// adapterTarget is the adapter whose NameServer and SearchList this
 	// instance still owes cleanup: one it wrote to, or a recorded
 	// predecessor's adapter whose clear failed. It survives external record
@@ -319,15 +324,6 @@ func New(_ context.Context, opts Options) (*Backend, error) {
 	if checkIdentity == nil {
 		checkIdentity = newDefaultLocalSystemCheck()
 	}
-	if checkIdentity != nil {
-		system, err := checkIdentity()
-		switch {
-		case err != nil:
-			logger.Warn("windows: could not verify execution identity; DNS configuration expects LocalSystem", "error", err)
-		case !system:
-			logger.Warn("windows: DNS configuration expects LocalSystem; running without it is best effort, and Group Policy DNS rules may remain effective after cleanup")
-		}
-	}
 	r := opts.Runner
 	if r == nil {
 		r = runner.ExecRunner{}
@@ -363,8 +359,27 @@ func New(_ context.Context, opts Options) (*Backend, error) {
 		resolveInterface: resolve,
 		notifier:         notifier,
 		domainJoined:     domainJoined,
+		checkIdentity:    checkIdentity,
 		changes:          make(chan struct{}, 1),
 	}, nil
+}
+
+// warnIdentityOnce logs the execution-identity diagnostic before the first
+// registry write, from mutation.begin and reload. Every Windows process builds a backend, but only one that writes
+// can leave Group Policy rules effective after cleanup.
+func (b *Backend) warnIdentityOnce() {
+	check := b.checkIdentity
+	if check == nil {
+		return
+	}
+	b.checkIdentity = nil
+	system, err := check()
+	switch {
+	case err != nil:
+		b.logger.Warn("windows: could not verify execution identity; DNS configuration expects LocalSystem", "error", err)
+	case !system:
+		b.logger.Warn("windows: DNS configuration expects LocalSystem; running without it is best effort, and Group Policy DNS rules may remain effective after cleanup")
+	}
 }
 
 // Changes returns the coalesced change signal. It is closed by Close.
@@ -454,6 +469,9 @@ func (b *Backend) reload(ctx context.Context, mut *mutation) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// A reload can be an attempt's only write, when a predecessor's artifacts
+	// already match.
+	b.warnIdentityOnce()
 	if err := b.reg.SetString(nrptBase, reloadTriggerValue, "1"); err != nil {
 		return fmt.Errorf("windows: trigger adapter reload: %w", err)
 	}

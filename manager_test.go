@@ -70,6 +70,50 @@ func TestSet_ForcedNoopConverges(t *testing.T) {
 	require.NoError(t, m.Close())
 }
 
+// TestStatus_DeclinedKeepsRefusal pins that a Manager whose backend applies
+// nothing, unless the caller forced BackendNoop, never reports a verified
+// clean host: its Clear converges, but LastError keeps the refusal and
+// LastConvergedCleared stays false through Close.
+func TestStatus_DeclinedKeepsRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		opts     Options
+		declined bool
+	}{
+		{name: "detected noop", declined: true},
+		{name: "forced noop", opts: Options{ForceBackend: BackendNoop}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, BackendNoop, tc.opts)
+			check := func(when string) {
+				t.Helper()
+				s := h.m.Status()
+				if tc.declined {
+					assert.ErrorIs(t, s.LastError, ErrConfigurationDeclined, when)
+					assert.False(t, s.LastConvergedCleared, when)
+				} else {
+					assert.NoError(t, s.LastError, when)
+				}
+			}
+			check("after New")
+			var e *Error
+			if tc.declined {
+				require.ErrorAs(t, h.m.Status().LastError, &e)
+				assert.Equal(t, "New", e.Op)
+			}
+
+			require.NoError(t, h.m.Clear())
+			h.converged("clear")
+			assert.True(t, h.m.Status().Converged, "callers waiting for convergence still see it")
+			check("after Clear")
+			assert.Equal(t, !tc.declined, h.m.Status().LastConvergedCleared)
+
+			h.closeAnswering()
+			check("after Close")
+		})
+	}
+}
+
 func TestSet_ValidationReturnsDirectly(t *testing.T) {
 	for _, tc := range []struct {
 		name string

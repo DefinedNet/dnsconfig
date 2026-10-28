@@ -22,3 +22,6 @@ func newNativeBackend(ctx context.Context, kind BackendKind, opts Options) (back
 	}
 	return b, nil
 }
+
+// nativeDeclined reports why this process cannot manage kind's DNS, or nil.
+func nativeDeclined(BackendKind) error { return nil }

@@ -63,7 +63,10 @@ type Options struct {
 	// ForceBackend selects a specific backend; the zero value requests
 	// detection. New never falls back to a different backend: an undeclared
 	// kind fails Validate, and a kind with no implementation on this OS fails
-	// New with ErrInvalidOptions. See [BackendNoop] for forcing the no-op one.
+	// New with ErrInvalidOptions. The exception is a declined host, such as
+	// BackendDarwin in a process that is not root, which gets a Manager that
+	// refuses Set with [ErrConfigurationDeclined]. See [BackendNoop] for
+	// forcing the no-op one.
 	ForceBackend BackendKind
 
 	// InterfaceName is the friendly name of a Windows adapter, such as a

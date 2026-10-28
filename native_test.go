@@ -16,7 +16,8 @@ func TestNewConstructsNativeBackend(t *testing.T) {
 	var kind BackendKind
 	switch runtime.GOOS {
 	case "darwin":
-		kind = BackendDarwin
+		// A non-root test user would get a declined Manager here.
+		t.Skip("covered by TestNew_DarwinWithRootBuildsBackend, which forces the root check")
 	case "windows":
 		kind = BackendWindows
 	default:
