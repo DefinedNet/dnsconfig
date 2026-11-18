@@ -69,7 +69,8 @@ delivery. The [macOS matrix](../internal/cmd/smoketest/matrix_macos.go) and
 cleanup. The assertions live in the runners:
 
 - [macOS runner][macos]: base-row search order and over-limit refusal, and M3
-  signal-driven repair across a configd restart.
+  signal-driven repair across a configd restart. M3 needs macOS 14, which CI
+  no longer has, so that check only runs by hand on a Sonoma machine.
 - [macOS pair runner][pair]: M7 shared search suffix.
 - [Windows policy runner][policy]: W5 Group Policy NRPT beside a foreign
   rule, local copies after the container and the foreign rule leave, and the
