@@ -1,7 +1,8 @@
 # Run one DNS-mutating smoke row per disposable runner to isolate resolver state.
-# M1/M2 use macOS 15, M3/M4 use macOS 14, and M5/M6 use macOS 26.
-# Each pair covers catch-all and split DNS; M3 also restarts configd.
-# M7 checks two identities on each of macOS 14, 15, and 26 under one row ID.
+# M1/M2 use macOS 15 and M5/M6 use macOS 26. Each pair covers catch-all and
+# split DNS. M7 checks two identities on macOS 15 and 26 under one row ID.
+# M3/M4 are the macOS 14 rows. GitHub no longer hosts macOS 14 runners, so they
+# only run by hand on a Sonoma machine, along with M3's configd restart check.
 # See internal/cmd/smoketest/matrix_macos.go.
 name: smoke macos
 
@@ -27,12 +28,6 @@ jobs:
           - runner: macos-15
             row: "M2"
             desc: "Sequoia split + reverse zone"
-          - runner: macos-14
-            row: "M3"
-            desc: "Sonoma catch-all"
-          - runner: macos-14
-            row: "M4"
-            desc: "Sonoma split + reverse zone"
           - runner: macos-26
             row: "M5"
             desc: "Tahoe catch-all"
@@ -42,9 +37,6 @@ jobs:
           - runner: macos-15
             row: "M7"
             desc: "Sequoia two identities"
-          - runner: macos-14
-            row: "M7"
-            desc: "Sonoma two identities"
           - runner: macos-26
             row: "M7"
             desc: "Tahoe two identities"
