@@ -1,10 +1,9 @@
 package main
 
-// macosMatrix covers catch-all and split DNS on macOS 15 and 26.
-// M5 also checks State-key repair across a configd restart and the
-// notification child's delivery after it; M7 checks two application
-// identities. Runner labels select CI hosts; the
-// harness always runs on the current machine.
+// macosMatrix covers catch-all and split DNS on macOS 15 and 26. M1 and M5
+// also check State-key repair across a configd restart and the notification
+// child's delivery after it; M7 checks two application identities. Runner
+// labels select CI hosts; the harness always runs on the current machine.
 func macosMatrix() []Row {
 	return []Row{
 		{

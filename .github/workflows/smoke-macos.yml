@@ -1,7 +1,7 @@
 # Run one DNS-mutating smoke row per disposable runner to isolate resolver state.
 # M1/M2 use macOS 15 and M5/M6 use macOS 26. Each pair covers catch-all and
 # split DNS. M7 checks two identities on macOS 15 and 26 under one row ID.
-# M5 also restarts configd under a live watch.
+# M1 and M5 also restart configd under a live watch.
 # See internal/cmd/smoketest/matrix_macos.go.
 name: smoke macos
 

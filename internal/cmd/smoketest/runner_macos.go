@@ -21,9 +21,9 @@ const (
 	macosWatchLog    = "/tmp/dnsconfig-watch.log"
 	macosStatePrefix = "State:/Network/Service/dnsconfig-"
 
-	// macosWatchCatchAllKey is the catch-all State key of M5's watch, which
-	// runs under dnsconfigctl's default identity; the backend publishes a
-	// catch-all at index 0.
+	// macosWatchCatchAllKey is the catch-all State key of the restart
+	// check's watch, which runs under dnsconfigctl's default identity; the
+	// backend publishes a catch-all at index 0.
 	macosWatchCatchAllKey = macosStatePrefix + "dnsconfigctl-0/DNS"
 
 	// macosOwnKeyPrefix names the State keys of dnsconfigctl's default
@@ -494,8 +494,8 @@ func (o *macosOverlap) restore(ctx context.Context, cfg runConfig) ExecResult {
 	return cfg.exec(ctx, 15*time.Second, setSearchArgs(o.service, o.original)...)
 }
 
-// Lines M5 reads from the watch log, in the form -v's slog text handler
-// prints them.
+// Lines the restart check reads from the watch log, in the form -v's slog
+// text handler prints them.
 const (
 	macosAttemptFinished = `msg="dnsconfig: attempt finished"`
 	macosSignalOpened    = `msg="dnsconfig: change signal" opened=true`
@@ -508,10 +508,10 @@ const (
 )
 
 const (
-	// macosKillSettle is how long after the ready line M5 waits before it
-	// may restart configd. Notifications for the first converge's own writes
-	// arrive within it, so their debounce window shows in the log before
-	// the idle check reads it.
+	// macosKillSettle is how long after the ready line the restart check
+	// waits before it may restart configd. Notifications for the first
+	// converge's own writes arrive within it, so their debounce window shows
+	// in the log before the idle check reads it.
 	macosKillSettle = time.Second
 
 	// macosQuietMax bounds how long before the key removal the latest
@@ -780,7 +780,12 @@ func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() st
 		}
 		var done bool
 		attempts, done = macosRepairAttempts(log, skip)
-		if done && strings.Contains(attempts[len(attempts)-1], " changed=true") {
+		if done {
+			// The recreating attempt is final, so an unchanged one cannot recover.
+			if !strings.Contains(attempts[len(attempts)-1], " changed=true") {
+				cfg.Log("    watcher: keys recreated but the attempt reported changed=false: %s", attempts[len(attempts)-1])
+				return "watch-repair"
+			}
 			repairAt = time.Now()
 			break
 		}
@@ -1137,14 +1142,16 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 		return ri.failOrKeep("overlap-reset")
 	}
 
-	// M5 carries the restart watcher proof on the newest macOS CI host: the
-	// restart shows the keys come back and the notification child is not
-	// replaced, and the key removal after it shows the child still hears
-	// changes.
-	// The overlap stays in place, so the repaired keys must compile into the
-	// same layout. configd drops the primary service's DNS until the network
-	// agents republish it, hence the longer wait.
-	if row.ID == "M5" {
+	// The catch-all rows on macOS 15 and 26 carry the restart watcher proof.
+	// killall takes effect late on both, and the restart step does not
+	// depend on that timing: the restart shows the keys come back and the
+	// notification child is not replaced, and the key removal after it shows
+	// the child still hears changes. The overlap stays in place, so the
+	// repaired keys must compile into the same layout. configd drops the
+	// primary service's DNS until the network agents republish it, hence the
+	// longer wait.
+	restartCheck := row.ID == "M1" || row.ID == "M5"
+	if restartCheck {
 		if stage := watcherCheckMacos(ctx, cfg, func() string {
 			if tag := macosCheckSearchContribution(ctx, cfg, []string{sentinelSearchDomain}, overlap.base, 60*time.Second); tag != "" {
 				return "watch-overlap-" + tag
@@ -1167,10 +1174,10 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 
 	// A configd restart drops the primary service's DNS until the network
 	// configuration agents republish it, and the live Manager's repair and
-	// Close can finish within seconds of the restart, so M5 waits for the
-	// base resolver to return.
+	// Close can finish within seconds of the restart, so the restart rows
+	// wait for the base resolver to return.
 	finalWait := time.Duration(0)
-	if row.ID == "M5" {
+	if restartCheck {
 		finalWait = 60 * time.Second
 	}
 	start := time.Now()
@@ -1188,7 +1195,7 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 		cfg.Log("    final-resolution failed: %s", res.String())
 		_, snapshot := macosSnapshot(ctx, cfg)
 		cfg.Log("    final resolver state: %s", snapshot.String())
-		if row.ID == "M5" {
+		if restartCheck {
 			watchLog := cfg.exec(ctx, 10*time.Second, "cat", macosWatchLog)
 			cfg.Log("    watcher log: %s", watchLog.String())
 		}

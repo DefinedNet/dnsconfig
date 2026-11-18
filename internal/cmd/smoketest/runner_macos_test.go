@@ -132,10 +132,14 @@ func TestMacosWatcherRestartRepair(t *testing.T) {
 		name      string
 		repairLog string
 		want      string
+		wantLog   string
 	}{
-		{name: "periodic repair", repairLog: testRecreated + attempt("periodic", "true")},
-		{name: "keys not recreated", repairLog: attempt("periodic", "true"), want: "watch-repair"},
-		{name: "host unchanged", repairLog: testRecreated + attempt("signal", "false"), want: "watch-repair"},
+		{name: "periodic repair", repairLog: testRecreated + attempt("periodic", "true"), wantLog: "keys recreated"},
+		{name: "keys not recreated", repairLog: attempt("periodic", "true"), want: "watch-repair", wantLog: "keys were not recreated"},
+		{
+			name: "host unchanged", repairLog: testRecreated + attempt("signal", "false"),
+			want: "watch-repair", wantLog: "keys recreated but the attempt reported changed=false",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fastPacing(t)
@@ -143,13 +147,18 @@ func TestMacosWatcherRestartRepair(t *testing.T) {
 			macosRepairWait = 10 * time.Millisecond
 			t.Cleanup(func() { macosRepairWait = saved })
 			driver := &macosWatchTestDriver{t: t, repairLog: tc.repairLog, deliveryLog: testDeliveryRepair}
-			cfg := runConfig{Driver: driver, Log: func(string, ...any) {}}
+			var logs strings.Builder
+			cfg := runConfig{
+				Driver: driver,
+				Log:    func(format string, args ...any) { fmt.Fprintf(&logs, format, args...) },
+			}
 			assert.Equal(t, tc.want, watcherCheckMacos(context.Background(), cfg, nil))
+			assert.Contains(t, logs.String(), tc.wantLog)
 		})
 	}
 }
 
-// TestMacosWatcherDelivery checks that M5 fails when no notification child
+// TestMacosWatcherDelivery checks that the restart check fails when no notification child
 // ran before the restart, when the child exited after it, or when a key
 // removed after the restart repair is repaired only by the periodic check.
 func TestMacosWatcherDelivery(t *testing.T) {
@@ -173,6 +182,8 @@ func TestMacosWatcherDelivery(t *testing.T) {
 		delivery  string
 		want      string
 		wantLog   string
+		// wantNotLog, when set, must not appear in the harness log.
+		wantNotLog string
 	}{
 		{name: "live child", repairLog: testSignalRepair, delivery: testDeliveryRepair, wantLog: "after the key removal"},
 		{
@@ -182,7 +193,12 @@ func TestMacosWatcherDelivery(t *testing.T) {
 			want:      "watch-deaf",
 			wantLog:   periodic,
 		},
-		{name: "child exited at restart", repairLog: testChildExited + testSignalRepair, want: "watch-child-exited", wantLog: macosChildExited},
+		{
+			name: "child exited at restart", repairLog: testChildExited + testSignalRepair,
+			want: "watch-child-exited", wantLog: macosChildExited,
+			// The restart step fails before accepting its repair.
+			wantNotLog: "keys recreated",
+		},
 		{name: "child exited after removal", repairLog: testSignalRepair, delivery: testChildExited + testDeliveryRepair, want: "watch-child-exited", wantLog: macosChildExited},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,8 +212,8 @@ func TestMacosWatcherDelivery(t *testing.T) {
 			assert.Equal(t, tc.want, watcherCheckMacos(context.Background(), cfg, nil))
 			assert.Contains(t, logs.String(), tc.wantLog)
 			assert.True(t, driver.stopped, "the watcher is stopped")
-			if tc.name == "child exited at restart" {
-				assert.NotContains(t, logs.String(), "keys recreated", "the restart step fails before accepting its repair")
+			if tc.wantNotLog != "" {
+				assert.NotContains(t, logs.String(), tc.wantNotLog)
 			}
 		})
 	}
