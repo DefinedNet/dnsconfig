@@ -35,9 +35,9 @@ func TestSentinelPTRName(t *testing.T) {
 
 // TestParseRowsExplicit checks comma-separated macOS row selection.
 func TestParseRowsExplicit(t *testing.T) {
-	got, err := parseRowsSelectionFor("darwin", "M1,m2,M3")
+	got, err := parseRowsSelectionFor("darwin", "M1,m2,M5")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"M1", "M2", "M3"}, rowIDs(got))
+	assert.Equal(t, []string{"M1", "M2", "M5"}, rowIDs(got))
 }
 
 // TestParseRowsEmpty confirms the empty string returns every macOS

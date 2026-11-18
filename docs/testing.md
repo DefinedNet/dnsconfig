@@ -68,9 +68,9 @@ delivery. The [macOS matrix](../internal/cmd/smoketest/matrix_macos.go) and
 [Windows library prelude][prelude] also checks adapter suffix replacement and
 cleanup. The assertions live in the runners:
 
-- [macOS runner][macos]: base-row search order and over-limit refusal, and M3
-  signal-driven repair across a configd restart. M3 needs macOS 14, which CI
-  no longer has, so that check only runs by hand on a Sonoma machine.
+- [macOS runner][macos]: base-row search order and over-limit refusal, and M5
+  State-key repair across a configd restart, then signal-driven repair of a
+  key removed after it.
 - [macOS pair runner][pair]: M7 shared search suffix.
 - [Windows policy runner][policy]: W5 Group Policy NRPT beside a foreign
   rule, local copies after the container and the foreign rule leave, and the

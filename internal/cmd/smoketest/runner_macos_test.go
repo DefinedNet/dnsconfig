@@ -45,6 +45,7 @@ type macosWatchTestDriver struct {
 	Driver
 	t              *testing.T
 	closeResult    ExecResult
+	goalLog        string
 	repairLog      string
 	deliveryLog    string
 	killed         bool
@@ -70,13 +71,8 @@ func (d *macosWatchTestDriver) Exec(_ context.Context, argv ...string) ExecResul
 			return ExecResult{Stdout: []byte("  no keys.\n")}
 		}
 		return ExecResult{Stdout: []byte("  subKey [0] = " + macosWatchCatchAllKey + "\n")}
-	case command == "pgrep -x configd":
-		if d.killed {
-			return ExecResult{Stdout: []byte("456\n")}
-		}
-		return ExecResult{Stdout: []byte("123\n")}
 	case command == "cat "+macosWatchLog:
-		log := testGoalLog
+		log := testGoalLog + d.goalLog
 		if d.killed {
 			log += d.repairLog
 		}
@@ -125,24 +121,51 @@ func TestMacosWatcherWaitsForCompletedClose(t *testing.T) {
 	}
 }
 
-// TestMacosWatcherRejectsPeriodicRepair checks that a restart repaired only by
-// the periodic check fails M3 and names the trigger.
-func TestMacosWatcherRejectsPeriodicRepair(t *testing.T) {
-	periodic := `time=t4 level=DEBUG msg="dnsconfig: attempt finished" trigger=periodic duration=1s changed=true failed=false`
-	driver := &macosWatchTestDriver{t: t, repairLog: testRecreated + periodic + "\n"}
-	var logs strings.Builder
-	cfg := runConfig{
-		Driver: driver,
-		Log:    func(format string, args ...any) { fmt.Fprintf(&logs, format, args...) },
+// TestMacosWatcherRestartRepair checks that the restart repair may come from
+// any trigger but must recreate the keys and change the host.
+func TestMacosWatcherRestartRepair(t *testing.T) {
+	attempt := func(trigger, changed string) string {
+		return `time=t4 level=DEBUG msg="dnsconfig: attempt finished" trigger=` + trigger +
+			` duration=1s changed=` + changed + " failed=false\n"
 	}
-	assert.Equal(t, "watch-signal", watcherCheckMacos(context.Background(), cfg, nil))
-	assert.Contains(t, logs.String(), periodic)
+	for _, tc := range []struct {
+		name      string
+		repairLog string
+		want      string
+	}{
+		{name: "periodic repair", repairLog: testRecreated + attempt("periodic", "true")},
+		{name: "keys not recreated", repairLog: attempt("periodic", "true"), want: "watch-repair"},
+		{name: "host unchanged", repairLog: testRecreated + attempt("signal", "false"), want: "watch-repair"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fastPacing(t)
+			saved := macosRepairWait
+			macosRepairWait = 10 * time.Millisecond
+			t.Cleanup(func() { macosRepairWait = saved })
+			driver := &macosWatchTestDriver{t: t, repairLog: tc.repairLog, deliveryLog: testDeliveryRepair}
+			cfg := runConfig{Driver: driver, Log: func(string, ...any) {}}
+			assert.Equal(t, tc.want, watcherCheckMacos(context.Background(), cfg, nil))
+		})
+	}
 }
 
-// TestMacosWatcherDelivery checks that M3 fails when the notification child
-// exited after the restart, or when a key removed after the restart repair is
-// repaired only by the periodic check.
+// TestMacosWatcherDelivery checks that M5 fails when no notification child
+// ran before the restart, when the child exited after it, or when a key
+// removed after the restart repair is repaired only by the periodic check.
 func TestMacosWatcherDelivery(t *testing.T) {
+	t.Run("source unavailable before restart", func(t *testing.T) {
+		fastPacing(t)
+		driver := &macosWatchTestDriver{
+			t:           t,
+			goalLog:     `time=t1 level=WARN msg="darwin: scutil notification source unavailable; drift is found only by periodic converges" error=EOF` + "\n",
+			repairLog:   testSignalRepair,
+			deliveryLog: testDeliveryRepair,
+		}
+		cfg := runConfig{Driver: driver, Log: func(string, ...any) {}}
+		assert.Equal(t, "watch-source-unavailable", watcherCheckMacos(context.Background(), cfg, nil))
+		assert.False(t, driver.killed, "the row fails before the restart")
+	})
+
 	periodic := `time=t7 level=DEBUG msg="dnsconfig: attempt finished" trigger=periodic duration=1s changed=true failed=false`
 	for _, tc := range []struct {
 		name      string
@@ -173,6 +196,9 @@ func TestMacosWatcherDelivery(t *testing.T) {
 			assert.Equal(t, tc.want, watcherCheckMacos(context.Background(), cfg, nil))
 			assert.Contains(t, logs.String(), tc.wantLog)
 			assert.True(t, driver.stopped, "the watcher is stopped")
+			if tc.name == "child exited at restart" {
+				assert.NotContains(t, logs.String(), "keys recreated", "the restart step fails before accepting its repair")
+			}
 		})
 	}
 }

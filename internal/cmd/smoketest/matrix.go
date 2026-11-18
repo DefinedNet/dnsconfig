@@ -2,7 +2,7 @@ package main
 
 // Row describes one macOS or Windows smoke scenario.
 type Row struct {
-	// ID is the matrix prefix joined to the row number, e.g. "M3". It is what
+	// ID is the matrix prefix joined to the row number, e.g. "M5". It is what
 	// -rows accepts and what log lines print.
 	ID string
 	// Name is the description printed in logs.

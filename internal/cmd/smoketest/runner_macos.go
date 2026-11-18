@@ -21,7 +21,7 @@ const (
 	macosWatchLog    = "/tmp/dnsconfig-watch.log"
 	macosStatePrefix = "State:/Network/Service/dnsconfig-"
 
-	// macosWatchCatchAllKey is the catch-all State key of M3's watch, which
+	// macosWatchCatchAllKey is the catch-all State key of M5's watch, which
 	// runs under dnsconfigctl's default identity; the backend publishes a
 	// catch-all at index 0.
 	macosWatchCatchAllKey = macosStatePrefix + "dnsconfigctl-0/DNS"
@@ -494,30 +494,29 @@ func (o *macosOverlap) restore(ctx context.Context, cfg runConfig) ExecResult {
 	return cfg.exec(ctx, 15*time.Second, setSearchArgs(o.service, o.original)...)
 }
 
-// Lines M3 reads from the watch log, in the form -v's slog text handler
+// Lines M5 reads from the watch log, in the form -v's slog text handler
 // prints them.
 const (
 	macosAttemptFinished = `msg="dnsconfig: attempt finished"`
 	macosSignalOpened    = `msg="dnsconfig: change signal" opened=true`
 	macosKeysRecreated   = "darwin: converge recreated dynamic-store keys"
 	macosChildExited     = "scutil notification child exited"
+
+	// macosSourceUnavailable is logged once, when the first notification
+	// child fails to start; a later start failure follows a child-exit line.
+	macosSourceUnavailable = "scutil notification source unavailable"
 )
 
 const (
-	// macosKillSettle is how long after the ready line M3 waits before it
+	// macosKillSettle is how long after the ready line M5 waits before it
 	// may restart configd. Notifications for the first converge's own writes
 	// arrive within it, so their debounce window shows in the log before
 	// the idle check reads it.
 	macosKillSettle = time.Second
 
-	// macosRepairWait bounds the wait for repair after the restart. It
-	// spans several periodic checks so a repair the change signal missed
-	// still lands and its trigger is reported.
-	macosRepairWait = 90 * time.Second
-
 	// macosQuietMax bounds how long before the key removal the latest
 	// attempt may have been seen to finish. The harness sees a finish up to
-	// about 1.5s late (a 1s poll plus the log and pgrep execs) and removes the
+	// about 1.5s late (a 1s poll plus the log read) and removes the
 	// key after the check, so the periodic check that attempt scheduled is
 	// still about 13s away or more.
 	macosQuietMax = 15 * time.Second
@@ -528,13 +527,18 @@ const (
 // that long. Tests shorten it.
 var macosPacingWait = 10 * time.Second
 
+// macosRepairWait bounds the wait for repair after the restart or the key
+// removal. It spans several periodic checks so a repair the change signal
+// missed still lands and its trigger is reported. Tests shorten it.
+var macosRepairWait = 90 * time.Second
+
 var macosTriggerRE = regexp.MustCompile(`\btrigger=(\S+)`)
 
 // macosWorkerIdle counts the finished attempts in a watch log and reports
 // whether the latest worker scheduling line is a successful one, so neither a
 // debounced change signal nor a failure retry is waiting to run. A failed
 // attempt's retry comes due before signalDebounce, so it would become the
-// first attempt after the restart and hide the signal's trigger.
+// first attempt after the key removal and hide the signal's trigger.
 func macosWorkerIdle(log []byte) (finished int, idle bool) {
 	for line := range strings.SplitSeq(string(log), "\n") {
 		switch {
@@ -589,10 +593,10 @@ func macosChildExit(log []byte, skip int) string {
 }
 
 // macosSignalRepair reports whether a repair started from a change signal:
-// the first attempt after the restart was signal-triggered, later ones up to
-// the recreating one were failure retries or further signals, and the
+// the first attempt after the key removal was signal-triggered, later ones up
+// to the recreating one were failure retries or further signals, and the
 // recreating one changed the host. A periodic trigger anywhere means the
-// notification child did not report the restart.
+// notification child did not report the removal.
 func macosSignalRepair(attempts []string) bool {
 	if len(attempts) == 0 {
 		return false
@@ -607,16 +611,15 @@ func macosSignalRepair(attempts []string) bool {
 }
 
 // macosCheckDelivery proves that the notification child still hears key
-// changes after the configd restart. scutil prints a reconnect line after any
-// restart and the child forwards every line as a change signal, so a
-// signal-driven restart repair shows only that the child survived. The step
-// waits until the worker is idle, macosPacingWait has passed since the
-// repair finished at repairAt, and the latest attempt finished within
-// macosQuietMax, then removes the catch-all key and requires a repair that
-// starts from a change signal, as after the restart. A live child repairs
+// changes after the configd restart; the restart step proves only that it
+// survived. The step waits until the worker is idle, macosPacingWait has
+// passed since the restart repair finished at repairAt, and the latest
+// attempt finished within macosQuietMax, then removes the catch-all key and
+// requires a repair that starts from a change signal. A live child repairs
 // within signalDebounce of the removal; a deaf one leaves it to the periodic
-// check. A stray signal within tens of milliseconds of the removal could
-// start the repair instead, and that race is accepted as for the restart.
+// check, which is then about 13s away or more. A stray signal within tens of
+// milliseconds of the removal could start the repair instead; that race is
+// accepted because a deaf child stays deaf and fails a later run.
 // Attempt ages count from when the harness saw them, so a log read that
 // stalls near its 10s timeout shortens the margin; that is accepted too.
 // killSkip and repairCount are the finished-attempt counts before the
@@ -694,27 +697,24 @@ func macosCheckDelivery(ctx context.Context, cfg runConfig, readLog func() []byt
 	return ""
 }
 
-// watcherCheckMacos proves that a configd restart drops the State key and
-// that the scutil notification child's change signal, not the periodic check,
-// drives the long-lived Manager's repair. The backend's recreated-keys line
-// shows the keys were created again rather than surviving the restart, and
-// the worker's attempt-finished lines, which -v sends to the log through
-// stderr, carry the trigger of each attempt.
+// watcherCheckMacos proves that a long-lived Manager's scutil notification
+// child survives a configd restart and still hears changes afterwards. The
+// restart step proves the keys come back: the backend's recreated-keys line,
+// which -v sends to the log through stderr, shows they were created again
+// rather than surviving the restart, and a "scutil notification child exited"
+// warning after the restart fails the check, because the backend would
+// replace that child. macosCheckDelivery then proves the surviving child
+// still hears key changes.
 //
-// Every finished attempt schedules the next periodic check
-// periodicCheckInterval (30s) later, and a change signal runs an attempt
-// signalDebounce (2s) after it opens. The restart therefore waits until the
-// log shows the latest attempt finished with no debounce window open, so no
-// attempt is due when the keys vanish and the next periodic check is still
-// about 28s away. A live notification child repairs within signalDebounce of
-// configd answering again; a deaf one leaves the repair to the periodic check.
-// An echo of the watch's own writes that lands within tens of milliseconds of
-// the restart could still start the repair; that race is accepted because a
-// deaf child stays deaf and fails a later run. The backend restarts a child
-// that exited, and the replacement's echo of the recreating write would pass
-// for a signal-driven repair, so an exit warning after the restart fails the
-// check. macosCheckDelivery then proves the surviving child still hears key
-// changes.
+// The restart repair may come from any trigger. killall takes effect about
+// 15-16s late on macOS 15 and 26, and every finished attempt schedules the
+// next periodic check periodicCheckInterval (30s) later, so the periodic check
+// can legitimately win the repair even with a live child. scutil also prints
+// a reconnect line after any restart, so a signal-driven restart repair would
+// show only that the child survived, which the exit check already covers.
+// The restart waits until the log shows the latest attempt finished with no
+// debounce window open, so the finished-attempt count it records marks where
+// the restart's attempts begin.
 // afterRepair, when set, runs once the keys are back and its non-empty result
 // fails the check.
 func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() string) string {
@@ -736,7 +736,6 @@ func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() st
 	readLog := func() []byte {
 		return cfg.exec(ctx, 10*time.Second, "cat", macosWatchLog).Stdout
 	}
-	configdPid := func() string { return macosConfigdPid(ctx, cfg) }
 
 	readyScript := `for i in $(seq 1 30); do grep -q 'WATCH: ready applied=true' ` + macosWatchLog + ` && exit 0; sleep 1; done; cat ` + macosWatchLog + `; exit 1`
 	res = cfg.exec(ctx, 45*time.Second, "sh", "-c", readyScript)
@@ -744,12 +743,6 @@ func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() st
 	if !res.Successful() || !macosAssertKeysPresent(ctx, cfg, "watcher-ready") {
 		cfg.Log("    watcher: apply did not become ready: %s", res.String())
 		return "watch-ready"
-	}
-
-	pidBefore := configdPid()
-	if pidBefore == "" {
-		cfg.Log("    watcher: could not read configd pid")
-		return "watch-pid"
 	}
 
 	time.Sleep(time.Until(readyAt.Add(macosKillSettle)))
@@ -763,6 +756,12 @@ func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() st
 			cfg.Log("    watcher: worker did not go idle before the restart:\n%s", indent("        ", string(readLog())))
 			return "watch-settle"
 		}
+	}
+	// Without a child before the restart, a periodic repair would start the
+	// first one and the delivery step would pass with no child surviving.
+	if log := string(readLog()); strings.Contains(log, macosSourceUnavailable) {
+		cfg.Log("    watcher: notification source was unavailable before the restart:\n%s", indent("        ", log))
+		return "watch-source-unavailable"
 	}
 	res = cfg.exec(ctx, 15*time.Second, "sudo", "killall", "configd")
 	if !res.Successful() {
@@ -781,25 +780,17 @@ func watcherCheckMacos(ctx context.Context, cfg runConfig, afterRepair func() st
 		}
 		var done bool
 		attempts, done = macosRepairAttempts(log, skip)
-		repairAt = time.Now()
-		pidAfter := configdPid()
-		if done && pidAfter != "" && pidAfter != pidBefore {
+		if done && strings.Contains(attempts[len(attempts)-1], " changed=true") {
+			repairAt = time.Now()
 			break
 		}
 		if time.Now().After(deadline) {
-			cfg.Log("    watcher: key was not re-healed after configd restart; before=%s after=%s\n%s",
-				pidBefore, pidAfter, indent("        ", string(readLog())))
+			cfg.Log("    watcher: keys were not recreated after configd restart:\n%s", indent("        ", string(log)))
 			return "watch-repair"
 		}
 	}
-	if !macosSignalRepair(attempts) {
-		cfg.Log("    watcher: configd restart was not repaired from a change signal; "+
-			"the scutil notification child may have stopped reporting. Attempts after the restart:\n%s",
-			indent("        ", strings.Join(attempts, "\n")))
-		return "watch-signal"
-	}
-	cfg.Log("    watcher: signal-driven repair seen %s after the restart: %s",
-		time.Since(restartAt).Round(time.Second), attempts[len(attempts)-1])
+	cfg.Log("    watcher: keys recreated %s after killall: %s",
+		repairAt.Sub(restartAt).Round(time.Second), attempts[len(attempts)-1])
 	if !macosAssertKeysPresent(ctx, cfg, "watcher-repair") {
 		return "watch-repair"
 	}
@@ -1146,12 +1137,14 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 		return ri.failOrKeep("overlap-reset")
 	}
 
-	// M3 carries the restart watcher proof on Sonoma, where killall restarts
-	// configd promptly; on macOS 15 it takes effect about 16s late.
+	// M5 carries the restart watcher proof on the newest macOS CI host: the
+	// restart shows the keys come back and the notification child is not
+	// replaced, and the key removal after it shows the child still hears
+	// changes.
 	// The overlap stays in place, so the repaired keys must compile into the
 	// same layout. configd drops the primary service's DNS until the network
 	// agents republish it, hence the longer wait.
-	if row.ID == "M3" {
+	if row.ID == "M5" {
 		if stage := watcherCheckMacos(ctx, cfg, func() string {
 			if tag := macosCheckSearchContribution(ctx, cfg, []string{sentinelSearchDomain}, overlap.base, 60*time.Second); tag != "" {
 				return "watch-overlap-" + tag
@@ -1174,10 +1167,10 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 
 	// A configd restart drops the primary service's DNS until the network
 	// configuration agents republish it, and the live Manager's repair and
-	// Close can finish within seconds of the restart, so M3 waits for the
+	// Close can finish within seconds of the restart, so M5 waits for the
 	// base resolver to return.
 	finalWait := time.Duration(0)
-	if row.ID == "M3" {
+	if row.ID == "M5" {
 		finalWait = 60 * time.Second
 	}
 	start := time.Now()
@@ -1195,7 +1188,7 @@ func executeRowMacos(ctx context.Context, cfg runConfig, row Row) rowOutcome {
 		cfg.Log("    final-resolution failed: %s", res.String())
 		_, snapshot := macosSnapshot(ctx, cfg)
 		cfg.Log("    final resolver state: %s", snapshot.String())
-		if row.ID == "M3" {
+		if row.ID == "M5" {
 			watchLog := cfg.exec(ctx, 10*time.Second, "cat", macosWatchLog)
 			cfg.Log("    watcher log: %s", watchLog.String())
 		}

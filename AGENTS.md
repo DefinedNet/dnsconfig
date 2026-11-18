@@ -45,7 +45,7 @@ Beyond CONTRIBUTING:
 ## Smoke harness
 
 The harness changes the current machine's DNS. Run live rows only on
-disposable CI runners, never on a development machine. Rows are M1-M7 on
-macOS and W1-W7 on Windows and run sequentially because they share the
-host's DNS. Harness files that both hosts must compile use a `_win.go`
+disposable CI runners, never on a development machine. Rows are M1, M2, and
+M5-M7 on macOS and W1-W7 on Windows and run sequentially because they share
+the host's DNS. Harness files that both hosts must compile use a `_win.go`
 suffix, not `_windows.go`.
