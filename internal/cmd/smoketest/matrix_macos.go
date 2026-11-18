@@ -1,10 +1,9 @@
 package main
 
-// macosMatrix covers catch-all and split DNS on macOS 14, 15, and 26.
-// M3 also checks signal-driven State-key repair across a configd restart; M7
-// checks two application identities. Runner labels select CI hosts; the
-// harness always runs on the current machine. CI has no macOS 14 runners, so
-// M3 and M4 only run by hand on a Sonoma machine.
+// macosMatrix covers catch-all and split DNS on macOS 15 and 26. M1 and M5
+// also check State-key repair across a configd restart and the notification
+// child's delivery after it; M7 checks two application identities. Runner
+// labels select CI hosts; the harness always runs on the current machine.
 func macosMatrix() []Row {
 	return []Row{
 		{
@@ -14,16 +13,6 @@ func macosMatrix() []Row {
 		{
 			ID:           "M2",
 			Name:         "macOS 15 Sequoia (split DNS + reverse zone)",
-			Split:        true,
-			ReverseSplit: true,
-		},
-		{
-			ID:   "M3",
-			Name: "macOS 14 Sonoma (catch-all)",
-		},
-		{
-			ID:           "M4",
-			Name:         "macOS 14 Sonoma (split DNS + reverse zone)",
 			Split:        true,
 			ReverseSplit: true,
 		},
